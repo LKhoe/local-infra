@@ -110,6 +110,8 @@ with the values for the app filled in and a copy button on each.
 - **Alexa skill** (optional): a custom skill whose HTTPS endpoint is the app itself, at the URI in
   its `skill.json` (`/api/alexa`; `/api/alexa/skill` in my-recipes), with the *wildcard
   certificate* option, then `ALEXA_SKILL_ID` in `.env`. Details in the app's README.
+- **Home page** (public apps): add a card for the app to `home/site/index.html` (and its icon to
+  `home/site/icons/`), then `./deploy.sh home` from the local-infra folder (README, "Home page").
 
 ### 4. First deploy
 

@@ -26,6 +26,7 @@ local-infra/
   s3/                           tiny image: Garage binary on Alpine + marker check (start.sh)
   llm/                          Ollama image + the LLM gateway (server.mjs, store.mjs, admin.mjs, start.sh)
   metrics/                      anonymous usage metrics from the apps (server, store, admin, tests)
+  home/                         static landing page for www.khoe.dev (nginx, site/ = the files)
   backup/                       tiny image: pg_dump + busybox crond (backup.sh, backup-homeassistant.sh)
   scripts/bootstrap-pi.sh       first deploy from the Mac: local-infra + yarg, with checks
   scripts/new-project.sh        provision a project (db role + redis user + S3 key), print its env
@@ -414,6 +415,20 @@ encryption key. Keep that key in your password manager: without it the backups a
 
 A copy on a drive plugged into the same Pi protects against mistakes and SD death, but
 not against theft, fire or a power surge. Add an off-site copy if the data matters.
+
+### Home page (www.khoe.dev)
+
+A static landing page with one card per app (pt-BR, light/dark, no JavaScript). It is the `home` service
+(`localinfra-home`, nginx unprivileged on port 8080, read-only, no published port), on the `tunnel` network only.
+
+- Files: `home/site/` (`index.html`, `style.css`, icons) are copied into the image by `home/Dockerfile`;
+  `home/nginx.conf` sets the security headers (strict CSP, HSTS), GET/HEAD only and `/healthz`.
+- New app or changed text: edit `home/site/index.html` (one `<li>` card per app), then `./deploy.sh home`.
+- One-time, manual: **Cloudflare Zero Trust → Networks → Tunnels** → the tunnel → *Public hostname*:
+  `www.khoe.dev` → `HTTP`, `http://localinfra-home:8080`. Optionally redirect the apex `khoe.dev` to
+  `https://www.khoe.dev` (a Cloudflare Redirect Rule, so nothing else has to serve it).
+- Preview on the Mac: build `home/` with `DOCKER_CONTEXT=desktop-linux docker build` and run the image with
+  `-p 127.0.0.1:18080:8080`.
 
 ## 6. Container Health widget (umbrelOS)
 
