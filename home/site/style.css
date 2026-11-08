@@ -42,7 +42,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .water { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; opacity: 0.09; }
 .water span {
   position: absolute; left: -15%; top: -15%; width: 130%; height: 130%;
-  background: url(/water.webp) center / cover no-repeat;
+  background: url(/water.webp?v=2) center / cover no-repeat;
   will-change: transform; animation: flow 50s ease-in-out infinite alternate;
 }
 @keyframes flow {
