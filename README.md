@@ -418,7 +418,7 @@ not against theft, fire or a power surge. Add an off-site copy if the data matte
 
 ### Home page (www.khoe.dev)
 
-A static landing page with one card per app (pt-BR, light/dark, no JavaScript). It is the `home` service
+A static landing page with one card per app (pt-BR, dark theme, glass cards; `fx.js` draws the particle title and a water transition when leaving for an app, the background water is an SVG turbulence filter; no external libraries, and the links work without JS). It is the `home` service
 (`localinfra-home`, nginx unprivileged on port 8080, read-only, no published port), on the `tunnel` network only.
 
 - Files: `home/site/` (`index.html`, `style.css`, icons) are copied into the image by `home/Dockerfile`;
