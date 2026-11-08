@@ -60,6 +60,7 @@
           }
         }
       }
+      makeSprites();
       start = performance.now();
       return true;
     }
@@ -69,20 +70,41 @@
       else if (tries < 50) setTimeout(() => init(tries + 1), 200);
     }
 
-    let last = 0, visible = true;
+    // Pre-rendered dot sprites: drawImage of a tiny bitmap is much cheaper than thousands of
+    // arcs per frame, especially in Firefox, which draws canvas on the CPU on macOS.
+    function sprite(px, paint) {
+      const c = document.createElement("canvas");
+      c.width = c.height = px;
+      paint(c.getContext("2d"), px);
+      return c;
+    }
+    let dotRest, dotHot, glow;
+    function makeSprites() {
+      const s = Math.ceil(opts.size * dpr) + 2;
+      const dot = (rgb) => sprite(s, (g, n) => { g.fillStyle = `rgb(${rgb})`; g.beginPath(); g.arc(n / 2, n / 2, (opts.size * dpr) / 2, 0, Math.PI * 2); g.fill(); });
+      dotRest = dot(REST); dotHot = dot(HOT);
+      const gs = Math.ceil(opts.size * 4 * dpr);
+      glow = sprite(gs, (g, n) => {
+        const gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+        gr.addColorStop(0, `rgba(${HOT}, 0.35)`); gr.addColorStop(1, `rgba(${HOT}, 0)`);
+        g.fillStyle = gr; g.fillRect(0, 0, n, n);
+      });
+    }
+
+    let last = 0, visible = true, calm = 0;
     function frame(now) {
       // Physics in "60 fps frames" of real time, so motion keeps its speed when frames drop.
       const dt = last ? Math.max(0, Math.min((now - last) / 16.667, 3)) : 1;
       last = now;
       const t = now - start;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, W, H);
-      const restPath = new Path2D(), hotPath = new Path2D(), glowPath = new Path2D();
-      const r = opts.size / 2;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       const k = (0.06 + Math.min(t / opts.gather, 1) * 0.04) * dt;  // spring stiffens as the text forms
       const damp = Math.pow(0.8, dt);
       const R2 = opts.radius * opts.radius;
       const near = ptr.x > -opts.radius && ptr.x < W + opts.radius && ptr.y > -opts.radius && ptr.y < H + opts.radius;
+      const ds = dotRest.width / 2, gs = glow.width / 2;
+      let moving = 0;
       for (const p of parts) {
         if (!reduce && t > p.delay) {
           const dx = opts.drift * Math.sin(now / 900 + p.ph), dy = opts.drift * Math.cos(now / 1100 + p.ph);
@@ -98,21 +120,19 @@
           p.vx *= damp; p.vy *= damp;
           p.x += p.vx * dt; p.y += p.vy * dt;
         }
-        const off = Math.abs(p.x - p.tx) + Math.abs(p.y - p.ty);
-        if (off > 3) {
-          hotPath.moveTo(p.x + r, p.y); hotPath.arc(p.x, p.y, r, 0, Math.PI * 2);
-          glowPath.moveTo(p.x + r * 2.6, p.y); glowPath.arc(p.x, p.y, r * 2.6, 0, Math.PI * 2);
+        const x = p.x * dpr, y = p.y * dpr;
+        if (Math.abs(p.x - p.tx) + Math.abs(p.y - p.ty) > 3) {
+          moving++;
+          ctx.drawImage(glow, x - gs, y - gs);
+          ctx.drawImage(dotHot, x - ds, y - ds);
         } else {
-          restPath.moveTo(p.x + r, p.y); restPath.arc(p.x, p.y, r, 0, Math.PI * 2);
+          ctx.drawImage(dotRest, x - ds, y - ds);
         }
       }
-      ctx.fillStyle = `rgb(${REST})`;
-      ctx.fill(restPath);
-      ctx.fillStyle = `rgba(${HOT}, 0.16)`;   // cheap glow (shadowBlur is slow on big paths)
-      ctx.fill(glowPath);
-      ctx.fillStyle = `rgb(${HOT})`;
-      ctx.fill(hotPath);
-      if (reduce || !visible) { running = false; return; }
+      // Once the text has formed and nothing is pushing it, stop redrawing (saves CPU/battery);
+      // the pointer or a click starts it again.
+      calm = (!moving && !near && t > opts.gather + opts.stagger) ? calm + 1 : 0;
+      if (reduce || !visible || calm > 45) { running = false; return; }
       raf = requestAnimationFrame(frame);
     }
 
@@ -123,7 +143,7 @@
 
     function run() {
       if (running || !parts.length) return;
-      running = true; last = 0;
+      running = true; last = 0; calm = 0;
       raf = requestAnimationFrame(frame);
     }
 
@@ -132,7 +152,10 @@
       return { x: e.clientX - b.left, y: e.clientY - b.top };
     }
     if (!reduce) {
-      window.addEventListener("pointermove", (e) => { const p = toLocal(e); ptr.x = p.x; ptr.y = p.y; }, { passive: true });
+      window.addEventListener("pointermove", (e) => {
+        const p = toLocal(e); ptr.x = p.x; ptr.y = p.y;
+        if (p.x > -opts.radius && p.x < W + opts.radius && p.y > -opts.radius && p.y < H + opts.radius) run();
+      }, { passive: true });
       document.addEventListener("pointerleave", () => { ptr.x = ptr.y = -1e4; });
       canvas.addEventListener("pointerdown", (e) => {
         const c = toLocal(e), R = opts.radius * 2;
@@ -140,6 +163,7 @@
           const ex = p.x - c.x, ey = p.y - c.y, d = Math.hypot(ex, ey) || 1;
           if (d < R) { const f = (1 - d / R) * 22; p.vx += (ex / d) * f; p.vy += (ey / d) * f; }
         }
+        run();
       });
       document.addEventListener("visibilitychange", () => {
         cancelAnimationFrame(raf); running = false;

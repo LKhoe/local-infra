@@ -23,33 +23,32 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 /* ---------- background: deep water ---------- */
 .fx-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
-.depths { position: fixed; inset: -20%; z-index: 0; pointer-events: none; filter: blur(90px); opacity: 0.5; }
+/* Soft dark blobs: radial gradients (no CSS blur filter, which Firefox recomputes every frame). */
+.depths { position: fixed; inset: -20%; z-index: 0; pointer-events: none; opacity: 0.7; }
 .depths span {
-  position: absolute; will-change: transform; width: 50vmax; height: 50vmax; border-radius: 50%;
+  position: absolute; width: 70vmax; height: 70vmax; border-radius: 50%; will-change: transform;
   animation: drift 30s ease-in-out infinite alternate;
 }
-.depths span:nth-child(1) { background: #1a2633; top: 0; left: 5%; }
-.depths span:nth-child(2) { background: #132029; top: 35%; right: 0; animation-duration: 38s; animation-delay: -8s; }
-.depths span:nth-child(3) { background: #1d1a26; bottom: -5%; left: 30%; animation-duration: 44s; animation-delay: -16s; }
+.depths span:nth-child(1) { background: radial-gradient(closest-side, #1a2633, transparent); top: -10%; left: -5%; }
+.depths span:nth-child(2) { background: radial-gradient(closest-side, #132029, transparent); top: 25%; right: -10%; animation-duration: 38s; animation-delay: -8s; }
+.depths span:nth-child(3) { background: radial-gradient(closest-side, #1d1a26, transparent); bottom: -15%; left: 20%; animation-duration: 44s; animation-delay: -16s; }
 @keyframes drift {
-  0%   { transform: translate(0, 0) scale(1); }
-  50%  { transform: translate(6vw, -4vh) scale(1.1); }
-  100% { transform: translate(-5vw, 6vh) scale(0.95); }
+  0%   { transform: translate3d(0, 0, 0); }
+  50%  { transform: translate3d(6vw, -4vh, 0); }
+  100% { transform: translate3d(-5vw, 6vh, 0); }
 }
-/* light caustics moving on the surface (SVG turbulence filter, see index.html) */
-/* The filter is rasterized once; only the layer moves (on the GPU), so it costs ~nothing per frame. */
-.water {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
-  opacity: 0.075; mix-blend-mode: screen;
-}
-.water svg {
-  position: absolute; left: -25%; top: -25%; width: 150%; height: 150%;
-  will-change: transform; animation: flow 60s ease-in-out infinite alternate;
+/* Light caustics: a pre-rendered image (water.webp) that only slides, so every browser just
+   moves a bitmap on the GPU instead of re-running an SVG filter each frame. */
+.water { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; opacity: 0.09; }
+.water span {
+  position: absolute; left: -15%; top: -15%; width: 130%; height: 130%;
+  background: url(/water.webp) center / cover no-repeat;
+  will-change: transform; animation: flow 50s ease-in-out infinite alternate;
 }
 @keyframes flow {
-  0%   { transform: translate3d(0, 0, 0) scale(1); }
-  50%  { transform: translate3d(-6%, 4%, 0) scale(1.06); }
-  100% { transform: translate3d(5%, -5%, 0) scale(1.02); }
+  0%   { transform: translate3d(0, 0, 0); }
+  50%  { transform: translate3d(-5%, 3%, 0); }
+  100% { transform: translate3d(4%, -4%, 0); }
 }
 
 /* ---------- layout ---------- */
@@ -112,8 +111,8 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
     inset 0 1px 0 rgb(255 255 255 / 12%),
     inset 0 -1px 0 rgb(0 0 0 / 25%),
     0 20px 40px -18px rgb(0 0 0 / 70%);
-  backdrop-filter: blur(14px) saturate(115%);
-  -webkit-backdrop-filter: blur(14px) saturate(115%);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   transform: rotateX(var(--rx)) rotateY(var(--ry));
   transition: transform 0.25s ease-out, border-color 0.3s, background-color 0.3s;
 }
