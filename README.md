@@ -19,7 +19,7 @@ Projects don't run their own Postgres, Redis, file storage or LLM keys. They joi
 
 ```
 local-infra/
-  compose.yml                   postgres + redis + s3 + llm + backup + tunnel
+  compose.yml                   postgres + redis + s3 + llm + metrics + backup + tunnel + home
   deploy.sh                     apply changes on the Pi (waits for healthy), or release Container Health
   .env.example                  copy to .env (secrets, backup path, schedule)
   redis/                        tiny image: redis + ACL bootstrap (start.sh)
