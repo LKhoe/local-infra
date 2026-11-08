@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Deploy LocalInfra to the Raspberry Pi from the Mac, through the Docker context: the small images
+# Deploy local-infra to the Raspberry Pi from the Mac, through the Docker context: the small images
 # are built on the Pi and only the services whose definition changed are recreated, so the apps
-# using LocalInfra keep running. The first deploy is scripts/bootstrap-pi.sh.
+# using local-infra keep running. The first deploy is scripts/bootstrap-pi.sh.
 #
 #   ./deploy.sh                  apply compose.yml on the Pi, wait until every service is healthy
 #   ./deploy.sh llm s3           only these services

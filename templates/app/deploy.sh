@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Deploy this app to the Raspberry Pi through a Docker context: the image is built and run on
-# the Pi, nothing is cloned there. LocalInfra (Postgres/Redis/S3) keeps running.
-# Same file in every app — copied from LocalInfra/templates/app/deploy.sh; see
-# LocalInfra/DEPLOYING-APPS.md. Everything app-specific is read from docker-compose.yml.
+# the Pi, nothing is cloned there. local-infra (Postgres/Redis/S3) keeps running.
+# Same file in every app — copied from local-infra/templates/app/deploy.sh; see
+# local-infra/DEPLOYING-APPS.md. Everything app-specific is read from docker-compose.yml.
 #
 #   ./deploy.sh              build what's in the working tree on the Pi, restart, wait for healthy
 #   ./deploy.sh --release    first bump the patch version, commit and PUSH (needs package.json)
@@ -61,7 +61,7 @@ if [[ "$docker_host" == ssh://* ]]; then
   ssh_host=${docker_host#ssh://}
   if [[ "$(ssh -G "$ssh_host" 2>/dev/null | awk '$1 == "controlmaster" { print $2 }')" != false ]]; then
     echo "Warning: Docker context '${DOCKER_CONTEXT}' (${docker_host}) shares SSH connections (ControlMaster)," >&2
-    echo "         which can hang a deploy halfway. Use the 'umbrel-docker' alias: LocalInfra README section 1." >&2
+    echo "         which can hang a deploy halfway. Use the 'umbrel-docker' alias: local-infra README section 1." >&2
     confirm "Deploy anyway?"
   fi
 fi
@@ -88,12 +88,12 @@ case "${1:-}" in
 esac
 
 # ---------------------------------------------------------------- pre-flight
-# External networks (LocalInfra's) must already exist on the target —
+# External networks (local-infra's) must already exist on the target —
 # checked before the build, which takes minutes on the Pi.
 while read -r net; do
   [[ -z "$net" ]] && continue
   docker network inspect "$net" >/dev/null 2>&1 \
-    || die "Network $net not found on '${DOCKER_CONTEXT}'. Start LocalInfra first."
+    || die "Network $net not found on '${DOCKER_CONTEXT}'. Start local-infra first."
 done < <(jq -r '.networks // {} | to_entries[] | select(.value.external == true) | .value.name // .key' <<<"$config")
 
 # .env is the Pi's config; local-dev values belong in .env.local

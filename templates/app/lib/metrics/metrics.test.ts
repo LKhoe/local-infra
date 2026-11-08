@@ -1,4 +1,4 @@
-// Copied from LocalInfra/templates/app/lib/metrics/ (keep the copies in sync).
+// Copied from local-infra/templates/app/lib/metrics/ (keep the copies in sync).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanRoute, parseBrowserBatch, scrub } from "./schema";
 import { toRoutePattern } from "./route-pattern";

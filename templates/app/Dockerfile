@@ -1,5 +1,5 @@
 # Next.js (output: "standalone") + Drizzle app image.
-# Template: LocalInfra/templates/app/Dockerfile — see LocalInfra/DEPLOYING-APPS.md.
+# Template: local-infra/templates/app/Dockerfile — see local-infra/DEPLOYING-APPS.md.
 # Needs: next.config with output: "standalone", scripts/migrate.mjs, lib/db/migrations, an
 # /api/health route, and package-lock.json committed.
 
@@ -35,7 +35,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Only if the app runs pg_dump itself (e.g. an in-app backup): match LocalInfra's PG_VERSION,
+# Only if the app runs pg_dump itself (e.g. an in-app backup): match local-infra's PG_VERSION,
 # an older pg_dump refuses a newer server.
 # ARG PG_MAJOR=17
 # RUN apk add --no-cache postgresql${PG_MAJOR}-client

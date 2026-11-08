@@ -1,5 +1,5 @@
 // Container Health: umbrelOS widgets + a status page for the containers you run
-// yourself (LocalInfra, your projects), skipping the ones umbrelOS manages.
+// yourself (local-infra, your projects), skipping the ones umbrelOS manages.
 //
 // Read-only by design (the one thing it does besides reading is the speed test, which only makes
 // outbound requests when someone presses its button): the only Docker API calls are GET /containers/json and, for
@@ -39,7 +39,7 @@ const SITE_ICON_MAX_BYTES = 256 * 1024;
 // Version label an image can set (docker build --label / LABEL in the Dockerfile)
 const VERSION_LABEL = "org.opencontainers.image.version";
 const PACKAGE_JSON_MAX_BYTES = 256 * 1024;
-// LocalInfra's own compose project: its helpers (the backup joins localinfra_postgres to dump
+// local-infra's own compose project: its helpers (the backup joins localinfra_postgres to dump
 // it) are infrastructure, not apps, so the resource map leaves them out
 const LOCALINFRA_PROJECT = "localinfra";
 // The nightly backup container; its scripts write their results as JSON (backup/status.sh)
@@ -58,7 +58,7 @@ const STATES = {
   stopped: { rank: 3, emoji: "❌", label: "Stopped" },
 };
 
-// What LocalInfra provides. A container uses a resource when it joins its network.
+// What local-infra provides. A container uses a resource when it joins its network.
 const RESOURCES = [
   { key: "postgres", label: "Postgres", short: "PG", network: "localinfra_postgres", provider: "localinfra-postgres" },
   { key: "redis", label: "Redis", short: "RD", network: "localinfra_redis", provider: "localinfra-redis" },
@@ -358,7 +358,7 @@ async function backups(snap) {
 }
 
 // ---------------------------------------------------------------- metrics
-// Light, anonymous usage metrics of the apps (LocalInfra/metrics): localinfra-metrics keeps them
+// Light, anonymous usage metrics of the apps (local-infra/metrics): localinfra-metrics keeps them
 // in Postgres and writes a summary every minute to /run/metrics/summary.json, read here with
 // containerFile like the backup status (cached METRICS_TTL_MS). This app joins no network and
 // holds no key for it. Routes are patterns and error messages are scrubbed by the service.
@@ -561,7 +561,7 @@ function startSpeedTest() {
 }
 
 // ---------------------------------------------------------------- updates
-// LocalInfra pins these images to a version in its .env. While a status page is open, the
+// local-infra pins these images to a version in its .env. While a status page is open, the
 // server looks up the newest release tag on Docker Hub (at most every UPDATE_TTL_MS) and the
 // page suggests the update. Nothing is pulled or changed from here.
 
@@ -1267,7 +1267,7 @@ function resourceMap(snap, mem) {
     .filter((c) => c.uses.length && c.project !== LOCALINFRA_PROJECT)
     .sort((a, b) => (a.project || a.name).localeCompare(b.project || b.name) || a.name.localeCompare(b.name));
   if (!apps.length) {
-    return '<div class="glass empty">No app uses LocalInfra yet. Join a <code>localinfra_*</code> network to show up here.</div>';
+    return '<div class="glass empty">No app uses local-infra yet. Join a <code>localinfra_*</code> network to show up here.</div>';
   }
   const H = Math.max(apps.length * 58, RESOURCES.length * 66);
   const yApp = (i) => ((i + 0.5) * H) / apps.length;
@@ -1592,7 +1592,7 @@ function updateBanners(updates) {
       (u) =>
         '<div class="upd glass" style="--c: var(--' + u.check.c + ')"><span class="gi">' + mark(u.check.brand) + "</span><div>" +
         "<b>" + escape(u.check.name + " " + u.latest) + " is available</b><small>running " + escape(u.running) + "</small>" +
-        "<p>Set " + chip(null, u.check.env + "=" + u.latest) + " in LocalInfra's <kbd>.env</kbd>, then run " + chip(null, "./deploy.sh " + u.check.service) + "</p></div>" +
+        "<p>Set " + chip(null, u.check.env + "=" + u.latest) + " in local-infra's <kbd>.env</kbd>, then run " + chip(null, "./deploy.sh " + u.check.service) + "</p></div>" +
         '<a class="btn" href="' + escape(u.check.notes) + '" target="_blank" rel="noopener noreferrer">' + icon("out") + "Release notes</a></div>",
     )
     .join("");
@@ -1631,7 +1631,7 @@ const chip = (key, fallback) =>
   '<button type="button" class="cp" title="Copy" aria-label="Copy">' + icon("copy", "cp-i") + icon("check", "ok") + "</button></span>";
 
 // ---------------------------------------------------------------- integrations
-// What each app talks to outside LocalInfra, by container name, from the apps' own READMEs.
+// What each app talks to outside local-infra, by container name, from the apps' own READMEs.
 // The page never reads a container's environment, so it shows what an app supports, not
 // which keys are set. "callback" is the OAuth redirect path, shown with the app's address.
 
@@ -1798,7 +1798,7 @@ function guides(snap) {
     '<ol class="steps">' +
     '<li class="warn" data-if="notunnel" hidden>This container is not on ' + chip(null, "localinfra_tunnel") +
     ', so the tunnel can\'t reach it. Add it to the networks in the app\'s compose file and run <kbd>./deploy.sh</kbd>.</li>' +
-    "<li>In Zero Trust go to <b>Networks → Tunnels</b> and open the LocalInfra tunnel (the one <kbd>localinfra-tunnel</kbd> runs).</li>" +
+    "<li>In Zero Trust go to <b>Networks → Tunnels</b> and open the local-infra tunnel (the one <kbd>localinfra-tunnel</kbd> runs).</li>" +
     "<li>Open the <b>Published application routes</b> tab and click <b>Add a published application route</b>.</li>" +
     "<li>Subdomain " + chip("sub", "myapp") + " Domain " + chip("domain", "example.com") +
     '<span class="note">Leave Path empty.</span></li>' +

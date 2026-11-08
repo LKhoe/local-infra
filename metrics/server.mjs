@@ -1,4 +1,4 @@
-// LocalInfra metrics: the apps send light, anonymous usage metrics here (Web Vitals, route views,
+// local-infra metrics: the apps send light, anonymous usage metrics here (Web Vitals, route views,
 // errors), and the Container Health status page shows them.
 //
 //   POST /v1/events   a batch from an app (Authorization: Bearer mx_..., see schema.mjs)
@@ -189,7 +189,7 @@ export function createService(config, store = openStore(config.databaseUrl)) {
 if (import.meta.url === `file://${process.argv[1]}`) {
   const config = configFromEnv();
   if (!config.databaseUrl) {
-    console.error("[metrics] METRICS_DATABASE_URL is not set: run scripts/new-project.sh localinfra_metrics --no-redis and put its DATABASE_URL in LocalInfra's .env");
+    console.error("[metrics] METRICS_DATABASE_URL is not set: run scripts/new-project.sh localinfra_metrics --no-redis and put its DATABASE_URL in local-infra's .env");
     process.exit(1);
   }
   const service = createService(config);

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision an isolated project on LocalInfra and print the env vars it needs.
+# Provision an isolated project on local-infra and print the env vars it needs.
 #
 #   Postgres: role <name> (LOGIN, no superuser/createdb/createrole) owning database <name>.
 #             CONNECT is revoked from PUBLIC, so other projects' roles can't even connect.
@@ -71,7 +71,7 @@ require_healthy() {
   local status
   status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null || true)
   if [[ "$status" != "healthy" ]]; then
-    echo "Container $1 is not healthy (status: ${status:-missing}). Start LocalInfra first: docker compose up -d" >&2
+    echo "Container $1 is not healthy (status: ${status:-missing}). Start local-infra first: docker compose up -d" >&2
     exit 1
   fi
 }

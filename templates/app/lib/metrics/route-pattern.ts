@@ -1,6 +1,6 @@
 // The route pattern of the current page, built from usePathname() and useParams(): every
 // segment that is a param value becomes its [name] ("/xadrez/AB12" → "/xadrez/[code]"), so no
-// id, code or username ever leaves the browser. Copied from LocalInfra/templates/app/lib/metrics/.
+// id, code or username ever leaves the browser. Copied from local-infra/templates/app/lib/metrics/.
 
 type Params = Record<string, string | string[] | undefined> | null | undefined;
 

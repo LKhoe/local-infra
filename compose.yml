@@ -1,4 +1,4 @@
-# LocalInfra — shared data services for every project on the Pi.
+# local-infra — shared data services for every project on the Pi.
 #
 #   postgres  → network "localinfra_postgres"  (one role + one database per project)
 #   redis     → network "localinfra_redis"     (one ACL user per project, keys "<project>:*")
@@ -132,7 +132,7 @@ services:
           propagation: rslave
           create_host_path: false
       # Home Assistant's own backups folder (it makes an encrypted .tar daily at 03:30).
-      # Read-only, so LocalInfra can never change or delete Home Assistant's backups.
+      # Read-only, so local-infra can never change or delete Home Assistant's backups.
       - ${HA_BACKUP_SOURCE:-/home/umbrel/umbrel/app-data/home-assistant/data/backups}:/homeassistant:ro
     networks:
       - postgres

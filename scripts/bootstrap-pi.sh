@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# One-shot, run from the Mac: bring up LocalInfra (Postgres, Redis, S3, tunnel) on the Pi, provision yarg on it,
-# point yarg's .env at LocalInfra and deploy yarg. Safe to re-run: each step checks first.
+# One-shot, run from the Mac: bring up local-infra (Postgres, Redis, S3, tunnel) on the Pi, provision yarg on it,
+# point yarg's .env at local-infra and deploy yarg. Safe to re-run: each step checks first.
 #
 #   scripts/bootstrap-pi.sh
 #
@@ -97,8 +97,8 @@ step "Backup and S3 folders on the external drive"
 ensure_drive_dir BACKUP_DIR .localinfra-backup-target
 ensure_drive_dir S3_DATA_DIR .localinfra-s3-target
 
-# ------------------------------------------------------------------ LocalInfra
-step "Starting LocalInfra on the Pi"
+# ------------------------------------------------------------------ local-infra
+step "Starting local-infra on the Pi"
 (cd "$INFRA_DIR" && docker compose up -d --build)
 wait_healthy localinfra-postgres 120
 wait_healthy localinfra-redis 60
@@ -109,14 +109,14 @@ wait_healthy localinfra-llm 120
 ok "localinfra-backup is running"
 
 # ------------------------------------------------------------------ provision yarg
-step "Provisioning yarg on LocalInfra"
+step "Provisioning yarg on local-infra"
 YARG_ENV="$YARG_DIR/.env"
 yarg_db_url=$(env_get "$YARG_ENV" DATABASE_URL)
 yarg_redis_pw=$(env_get "$YARG_ENV" REDIS_PASSWORD)
 # Already provisioned = real credentials (not the <password> placeholders from .env.example)
 if [[ "$yarg_db_url" == *@localinfra-postgres:* && "$yarg_db_url" != *"<password>"* \
    && "$(env_get "$YARG_ENV" REDIS_USERNAME)" == yarg && -n "$yarg_redis_pw" && "$yarg_redis_pw" != "<password>" ]]; then
-  ok "yarg .env already points at LocalInfra - keeping its credentials"
+  ok "yarg .env already points at local-infra - keeping its credentials"
 else
   prov=$(mktemp)
   trap 'rm -f "$prov"' EXIT
@@ -133,7 +133,7 @@ else
     match($0, /^[A-Z_]+=/) {
       k=substr($0,1,RLENGTH-1)
       if (k in v) { print k "=" v[k]; done[k]=1; next }
-      if (k=="POSTGRES_USER" || k=="POSTGRES_PASSWORD" || k=="POSTGRES_DB") { print "# unused since LocalInfra: " $0; next }
+      if (k=="POSTGRES_USER" || k=="POSTGRES_PASSWORD" || k=="POSTGRES_DB") { print "# unused since local-infra: " $0; next }
     }
     { print }
     END { for (i=1;i<=n;i++) if (!(o[i] in done)) print o[i] "=" v[o[i]] }

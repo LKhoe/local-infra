@@ -1,7 +1,7 @@
 # Deploying an app on the Pi
 
 The one way every app is deployed on the Raspberry Pi (umbrelOS): from the Mac, through the
-`umbrel` Docker context, on LocalInfra's shared services. Follow the same steps for every new
+`umbrel` Docker context, on local-infra's shared services. Follow the same steps for every new
 app. Reference implementation: **my-recipes**.
 
 ```
@@ -15,7 +15,7 @@ app. Reference implementation: **my-recipes**.
                                               └─ localinfra_tunnel   → Cloudflare tunnel → https://<app>.<domain>
 ```
 
-Nothing is cloned or copied to the Pi by hand. LocalInfra backs up every database nightly and
+Nothing is cloned or copied to the Pi by hand. local-infra backs up every database nightly and
 the Container Health widget shows the app as soon as it runs.
 
 ---
@@ -28,16 +28,16 @@ What every app needs before it can be deployed. The templates in
 | | Rule | Why |
 |---|---|---|
 | 1 | `docker-compose.yml` has **one service**; `container_name`, service name and image name are the app name (kebab-case), image tag `:latest` | `deploy.sh` reads everything from compose and keeps `<app>:previous` for rollback |
-| 2 | **No database, Redis or file volume of its own**: data goes to LocalInfra Postgres / Redis / S3. **No LLM API key of its own**: LLM calls go to LocalInfra's gateway | one place to run, back up, monitor and pay for |
+| 2 | **No database, Redis or file volume of its own**: data goes to local-infra Postgres / Redis / S3. **No LLM API key of its own**: LLM calls go to local-infra's gateway | one place to run, back up, monitor and pay for |
 | 3 | **No bind mounts** (`./file:/path`) | compose runs on the Mac, the paths would be looked up on the Pi |
-| 4 | Joins LocalInfra's networks as **external** networks, plus `localinfra_tunnel` if public | the tunnel and the shared services are reachable by container name |
+| 4 | Joins local-infra's networks as **external** networks, plus `localinfra_tunnel` if public | the tunnel and the shared services are reachable by container name |
 | 5 | A **healthcheck** on `GET /api/health` that checks the app's dependencies (DB, bucket, ...) | `deploy.sh` waits for it; the widget turns red when it fails |
 | 6 | A **unique host port** from the table below, container port 3000 | LAN access; two apps can't share a port |
 | 7 | A **memory limit** (512M default) and json-file log rotation | the Pi also runs umbrelOS and its apps |
 | 8 | The container **migrates on start** (entrypoint: wait for Postgres → migrate → start) | no manual step after a deploy |
 | 9 | Runtime deps come from the **lockfile** (`npm ci --omit=dev` in the runner stage), never `npm install <pkg>` | a bare install re-resolves every dependency; native modules (sharp) end up with mismatched versions |
 | 10 | **`.env` = the Pi, `.env.local` = local dev**, both git-ignored together with `.env.bak-*` | compose reads `.env` on the Mac; Next.js and dev scripts let `.env.local` win |
-| 11 | Redis keys/channels start with `REDIS_KEY_PREFIX`; S3 uses path-style requests, region `garage`; the bucket is never exposed, the app serves its files itself; LLM calls ask for a tier (`simple`/`medium`/`hard`) and handle `429` | LocalInfra's isolation rules (README section 4) |
+| 11 | Redis keys/channels start with `REDIS_KEY_PREFIX`; S3 uses path-style requests, region `garage`; the bucket is never exposed, the app serves its files itself; LLM calls ask for a tier (`simple`/`medium`/`hard`) and handle `429` | local-infra's isolation rules (README section 4) |
 
 ### Port table
 
@@ -56,7 +56,7 @@ Add the app here when you pick its port.
 ## Steps for a new app
 
 Prerequisites, once per Mac: SSH key login and the `umbrel` Docker context on the
-`umbrel-docker` SSH alias, which never shares connections (README section 1), and LocalInfra
+`umbrel-docker` SSH alias, which never shares connections (README section 1), and local-infra
 running on the Pi.
 
 ### 1. Prepare the repo (once)
@@ -65,7 +65,7 @@ Copy from `templates/app/` into the app repo and replace `myapp` / `30XX`:
 
 | Template | Goes to | Change |
 |---|---|---|
-| `docker-compose.yml` | repo root | app name, port, drop unused LocalInfra blocks, add the app's env vars |
+| `docker-compose.yml` | repo root | app name, port, drop unused local-infra blocks, add the app's env vars |
 | `deploy.sh` | repo root | nothing (same file in every app) |
 | `Dockerfile`, `docker-entrypoint.sh`, `scripts/migrate.mjs` | same paths | only for a Next.js + Drizzle app; otherwise write your own that keeps rules 8–9 |
 | `app/api/health/route.ts` | same path | add the app's other dependencies |
@@ -82,10 +82,10 @@ Copy from `templates/app/` into the app repo and replace `myapp` / `30XX`:
 
 Add the app to the port table above.
 
-### 2. Provision on LocalInfra and write `.env` (once)
+### 2. Provision on local-infra and write `.env` (once)
 
 ```bash
-DOCKER_CONTEXT=umbrel ../LocalInfra/scripts/provision-app.sh <app_name> <path/to/app> [--no-redis] [--s3] [--llm] [--metrics]
+DOCKER_CONTEXT=umbrel ../local-infra/scripts/provision-app.sh <app_name> <path/to/app> [--no-redis] [--s3] [--llm] [--metrics]
 ```
 
 An app that already exists and only needs the LLM key:
@@ -103,7 +103,7 @@ OAuth/API keys. Local-dev values go to `.env.local`, not `.env`.
 The Container Health page (Umbrel → Container Health → Open) has these as step-by-step guides,
 with the values for the app filled in and a copy button on each.
 
-- **Cloudflare Zero Trust → Networks → Tunnels** → the LocalInfra tunnel (`localinfra-tunnel`) → *Published application
+- **Cloudflare Zero Trust → Networks → Tunnels** → the local-infra tunnel (`localinfra-tunnel`) → *Published application
   routes*: add the public hostname, service `HTTP`, URL `<app>:3000`.
 - **OAuth providers** (Google, ...): add `https://<hostname>/api/auth/callback/<provider>` as a
   redirect URI.
@@ -157,13 +157,13 @@ email, a background job).
 ./deploy.sh --rollback   # back to the image that was live before the last deploy
 ```
 
-Only the app's container is rebuilt; LocalInfra and the other apps keep running. Rollback
+Only the app's container is rebuilt; local-infra and the other apps keep running. Rollback
 restores the code, not the database: a migration that already ran stays applied.
 
 ## Rotating credentials
 
 ```bash
-DOCKER_CONTEXT=umbrel ../LocalInfra/scripts/provision-app.sh <app_name> <path/to/app> [same flags] --rotate
+DOCKER_CONTEXT=umbrel ../local-infra/scripts/provision-app.sh <app_name> <path/to/app> [same flags] --rotate
 ./deploy.sh
 ```
 
@@ -175,12 +175,12 @@ New passwords/keys, same data. The app is down between the two commands.
 DOCKER_CONTEXT=umbrel docker compose down          # in the app repo: container only
 ```
 
-Then its data on LocalInfra (irreversible), README section 4, "Removing a project". Remove the
+Then its data on local-infra (irreversible), README section 4, "Removing a project". Remove the
 tunnel hostname and the port table row.
 
 ## Local development
 
-Run LocalInfra on Docker Desktop (README section 7), then provision the app there and point
+Run local-infra on Docker Desktop (README section 7), then provision the app there and point
 `.env.local` at `localhost`:
 
 ```bash
@@ -195,9 +195,9 @@ Never run `provision-app.sh` against Docker Desktop for an app whose `.env` hold
 
 | Symptom | Fix |
 |---|---|
-| `Network localinfra_… not found` | LocalInfra isn't running on that context, or the app joins a network it wasn't provisioned for |
+| `Network localinfra_… not found` | local-infra isn't running on that context, or the app joins a network it wasn't provisioned for |
 | `Bind for 0.0.0.0:<port> failed` | port taken: pick the next free one from the table |
-| `password authentication failed` / S3 `403` / Redis `NOPERM` | `.env` doesn't match LocalInfra: rotate (above) |
+| `password authentication failed` / S3 `403` / Redis `NOPERM` | `.env` doesn't match local-infra: rotate (above) |
 | `Error loading shared library libvips-cpp.so…` | rule 9: install runtime deps with `npm ci --omit=dev` |
 | Sign-in redirects to the wrong host | the public URL in `.env` is wrong; `NEXT_PUBLIC_*` needs a rebuild |
 | docker commands to the Pi hang | the `umbrel` context is sharing an SSH connection: point it at the `umbrel-docker` alias (README section 1). Unstick it now with `ssh -O exit umbrel.local` |
