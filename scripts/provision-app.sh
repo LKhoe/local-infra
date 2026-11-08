@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision an app on LocalInfra AND write its credentials into the app's .env, in one step.
+# Provision an app on local-infra AND write its credentials into the app's .env, in one step.
 # This is step 2 of DEPLOYING-APPS.md. It wraps new-project.sh, so the same flags apply.
 #
 # Usage (from anywhere, on the Mac):
@@ -60,15 +60,15 @@ awk '
   match($0, /^[A-Z0-9_]+=/) {
     k = substr($0, 1, RLENGTH - 1)
     if (k in v) { print k "=" v[k]; done[k] = 1; next }
-    if (k == "POSTGRES_USER" || k == "POSTGRES_PASSWORD" || k == "POSTGRES_DB") { print "# unused since LocalInfra: " $0; next }
+    if (k == "POSTGRES_USER" || k == "POSTGRES_PASSWORD" || k == "POSTGRES_DB") { print "# unused since local-infra: " $0; next }
     # The app calls the LLM gateway now; its own OpenRouter key (a secret) is dropped
-    if ((k == "OPENROUTER_API_KEY" || k == "OPENROUTER_MODEL") && ("LLM_API_KEY" in v)) { print "# " k "= (removed: LocalInfra LLM gateway)"; next }
+    if ((k == "OPENROUTER_API_KEY" || k == "OPENROUTER_MODEL") && ("LLM_API_KEY" in v)) { print "# " k "= (removed: local-infra LLM gateway)"; next }
   }
   { print }
   END {
     first = 1
     for (i = 1; i <= n; i++) if (!(o[i] in done)) {
-      if (first) { print ""; print "# ---- added by LocalInfra/scripts/provision-app.sh ----"; first = 0 }
+      if (first) { print ""; print "# ---- added by local-infra/scripts/provision-app.sh ----"; first = 0 }
       print o[i] "=" v[o[i]]
     }
   }

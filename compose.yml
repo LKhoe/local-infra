@@ -1,4 +1,4 @@
-# LocalInfra — shared data services for every project on the Pi.
+# local-infra — shared data services for every project on the Pi.
 #
 #   postgres  → network "localinfra_postgres"  (one role + one database per project)
 #   redis     → network "localinfra_redis"     (one ACL user per project, keys "<project>:*")
@@ -7,6 +7,7 @@
 #   tunnel    → network "localinfra_tunnel"    (Cloudflare tunnel; reaches public apps by container name)
 #   llm       → network "localinfra_llm"       (LLM gateway + local model; one key + paid-call limits per project)
 #   metrics   → network "localinfra_metrics"   (anonymous usage metrics from the apps; one key per project)
+#   home      → network "localinfra_tunnel"    (static landing page for www.khoe.dev, links to the apps)
 #
 # Projects join only the network(s) they need, as external networks.
 # New project:   scripts/new-project.sh <name>
@@ -132,7 +133,7 @@ services:
           propagation: rslave
           create_host_path: false
       # Home Assistant's own backups folder (it makes an encrypted .tar daily at 03:30).
-      # Read-only, so LocalInfra can never change or delete Home Assistant's backups.
+      # Read-only, so local-infra can never change or delete Home Assistant's backups.
       - ${HA_BACKUP_SOURCE:-/home/umbrel/umbrel/app-data/home-assistant/data/backups}:/homeassistant:ro
     networks:
       - postgres
@@ -324,6 +325,37 @@ services:
       resources:
         limits:
           memory: ${TUNNEL_MEMORY_LIMIT:-128M}
+    logging: *logging
+
+  home:
+    # Static landing page for https://www.khoe.dev (home/site, copied into the image). No published
+    # port: the Cloudflare tunnel reaches it at http://localinfra-home:8080 (route set in Zero Trust).
+    container_name: localinfra-home
+    build:
+      context: ./home
+    image: localinfra-home:latest
+    restart: unless-stopped
+    labels:
+      # Container Health shows it as an app with this link
+      localinfra.url: https://www.khoe.dev
+    networks:
+      - tunnel
+    read_only: true
+    tmpfs:
+      # nginx's pid file and temp dirs (the image is non-root, uid 101)
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          memory: ${HOME_MEMORY_LIMIT:-64M}
     logging: *logging
 
 volumes:

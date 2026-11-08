@@ -1,7 +1,7 @@
 // POST /api/metrics: what <Metrics /> sends from the browser (lib/metrics/schema.ts). Public on
 // purpose (the data is anonymous), so it is strict: same origin only, at most 8 KB, schema
 // checked, 30 requests a minute per client IP and 600 a minute for the whole app. Valid batches
-// go to LocalInfra's metrics service after the response. Copied from LocalInfra/templates/app/.
+// go to local-infra's metrics service after the response. Copied from local-infra/templates/app/.
 import { after, type NextRequest } from "next/server";
 import { MAX_BODY_BYTES, parseBrowserBatch } from "@/lib/metrics/schema";
 import { clientIp, createRateLimiter } from "@/lib/metrics/rate-limit";

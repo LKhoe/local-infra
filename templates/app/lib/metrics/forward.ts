@@ -1,7 +1,7 @@
-// Server side: hands batches to LocalInfra's metrics service (localinfra-metrics, on the internal
+// Server side: hands batches to local-infra's metrics service (localinfra-metrics, on the internal
 // network localinfra_metrics) with this app's key. Without METRICS_URL / METRICS_API_KEY (local
 // dev) it does nothing. Never throws: metrics must not break a request.
-// Copied from LocalInfra/templates/app/lib/metrics/.
+// Copied from local-infra/templates/app/lib/metrics/.
 import { cleanRoute, scrub, type MetricsBatch } from "./schema";
 
 export async function sendToMetrics(batch: MetricsBatch): Promise<void> {

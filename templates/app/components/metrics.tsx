@@ -1,10 +1,10 @@
 "use client";
 
-// Light, anonymous usage metrics (LocalInfra/README.md, "Metrics"). Put <Metrics /> once in the
+// Light, anonymous usage metrics (local-infra/README.md, "Metrics"). Put <Metrics /> once in the
 // root layout. It sends to this app's own /api/metrics: page views, Web Vitals (LCP, INP, CLS,
 // FCP, TTFB), the time of in-app navigations (NAV: click → new route painted) and uncaught
 // errors. Routes are patterns ("/recipes/[id]"); no cookie, no storage, no id of any kind.
-// Copied from LocalInfra/templates/app/components/metrics.tsx.
+// Copied from local-infra/templates/app/components/metrics.tsx.
 import { useEffect, useRef } from "react";
 import { useParams, usePathname } from "next/navigation";
 import { useReportWebVitals } from "next/web-vitals";

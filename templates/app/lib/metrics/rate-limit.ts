@@ -1,5 +1,5 @@
 // Fixed-window rate limit in this process's memory. The keys (client IPs) live only here, for at
-// most one window, and are never logged or sent anywhere. Copied from LocalInfra/templates/app/lib/metrics/.
+// most one window, and are never logged or sent anywhere. Copied from local-infra/templates/app/lib/metrics/.
 
 export function createRateLimiter({ limit, windowMs, maxKeys = 10000 }: { limit: number; windowMs: number; maxKeys?: number }) {
   const hits = new Map<string, { start: number; count: number }>();

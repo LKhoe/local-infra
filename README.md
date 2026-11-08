@@ -1,4 +1,4 @@
-# LocalInfra
+# local-infra
 
 Shared data services for every project hosted on the Raspberry Pi (umbrelOS 2), plus a
 small umbrelOS app that shows whether your containers are healthy.
@@ -18,16 +18,17 @@ Projects don't run their own Postgres, Redis, file storage or LLM keys. They joi
 **external** networks and use the credentials made by `scripts/new-project.sh`.
 
 ```
-LocalInfra/
-  compose.yml                   postgres + redis + s3 + llm + backup + tunnel
+local-infra/
+  compose.yml                   postgres + redis + s3 + llm + metrics + backup + tunnel + home
   deploy.sh                     apply changes on the Pi (waits for healthy), or release Container Health
   .env.example                  copy to .env (secrets, backup path, schedule)
   redis/                        tiny image: redis + ACL bootstrap (start.sh)
   s3/                           tiny image: Garage binary on Alpine + marker check (start.sh)
   llm/                          Ollama image + the LLM gateway (server.mjs, store.mjs, admin.mjs, start.sh)
   metrics/                      anonymous usage metrics from the apps (server, store, admin, tests)
+  home/                         static landing page for www.khoe.dev (nginx, site/ = the files)
   backup/                       tiny image: pg_dump + busybox crond (backup.sh, backup-homeassistant.sh)
-  scripts/bootstrap-pi.sh       first deploy from the Mac: LocalInfra + yarg, with checks
+  scripts/bootstrap-pi.sh       first deploy from the Mac: local-infra + yarg, with checks
   scripts/new-project.sh        provision a project (db role + redis user + S3 key), print its env
   scripts/provision-app.sh      new-project.sh + write the credentials into the app's .env
   templates/app/                compose, deploy.sh, Dockerfile, health route to copy into an app
@@ -163,7 +164,7 @@ safe to re-run.
 1. Preflight: SSH key login, 64-bit Pi, docker without sudo, the `umbrel` context
    (created if missing).
 2. Backup and S3 folders + markers on the external drive.
-3. Starts LocalInfra and waits for Postgres, Redis and S3 to be healthy.
+3. Starts local-infra and waits for Postgres, Redis and S3 to be healthy.
 4. Provisions `yarg` (database, role, Redis user) and writes the credentials into
    `../yarg-aggregator/.env` (the old file is kept as `.env.before-localinfra`).
 5. Builds and starts yarg-aggregator on the Pi, waits for it to be healthy.
@@ -189,7 +190,7 @@ DOCKER_CONTEXT=umbrel docker compose ps
 DOCKER_CONTEXT=umbrel docker compose logs -f redis
 ```
 
-Only containers whose definition changed are recreated; projects using LocalInfra keep
+Only containers whose definition changed are recreated; projects using local-infra keep
 running. `deploy.sh` first checks the Docker context (and that its SSH alias doesn't share
 connections), that no bind mount points at the Mac (a `BACKUP_DIR=./backups-local` left in the
 shell), the branch and uncommitted changes; the bare
@@ -232,7 +233,7 @@ networks:
 nothing else; buckets are created only by `new-project.sh`. The S3 API is never published
 through the tunnel: apps serve their files themselves (behind their own login).
 
-To publish the app through LocalInfra's Cloudflare tunnel, also join
+To publish the app through local-infra's Cloudflare tunnel, also join
 `localinfra_tunnel` (external) and point the tunnel's hostname at
 `http://<container_name>:<port>`. The routes live in Cloudflare Zero Trust (Networks →
 Tunnels), not in this repo; `localinfra-tunnel` only needs `CLOUDFLARE_TUNNEL_TOKEN` in `.env`.
@@ -403,7 +404,7 @@ DOCKER_CONTEXT=umbrel docker exec localinfra-backup \
 ### Home Assistant
 
 Home Assistant (the umbrelOS app) makes its own **encrypted** backup daily at 03:30 and keeps 3
-copies in its backups folder (Settings → System → Backups). LocalInfra mounts that folder
+copies in its backups folder (Settings → System → Backups). local-infra mounts that folder
 read-only (`HA_BACKUP_SOURCE`) and copies the newest `.tar` to the external drive. The copy
 fails, and says so in the log, when there is no backup or the newest one is older than
 `HA_BACKUP_MAX_AGE_HOURS` (26), meaning Home Assistant stopped backing up.
@@ -414,6 +415,20 @@ encryption key. Keep that key in your password manager: without it the backups a
 
 A copy on a drive plugged into the same Pi protects against mistakes and SD death, but
 not against theft, fire or a power surge. Add an off-site copy if the data matters.
+
+### Home page (www.khoe.dev)
+
+A static landing page with one card per app (pt-BR, light/dark, no JavaScript). It is the `home` service
+(`localinfra-home`, nginx unprivileged on port 8080, read-only, no published port), on the `tunnel` network only.
+
+- Files: `home/site/` (`index.html`, `style.css`, icons) are copied into the image by `home/Dockerfile`;
+  `home/nginx.conf` sets the security headers (strict CSP, HSTS), GET/HEAD only and `/healthz`.
+- New app or changed text: edit `home/site/index.html` (one `<li>` card per app), then `./deploy.sh home`.
+- One-time, manual: **Cloudflare Zero Trust → Networks → Tunnels** → the tunnel → *Public hostname*:
+  `www.khoe.dev` → `HTTP`, `http://localinfra-home:8080`. Optionally redirect the apex `khoe.dev` to
+  `https://www.khoe.dev` (a Cloudflare Redirect Rule, so nothing else has to serve it).
+- Preview on the Mac: build `home/` with `DOCKER_CONTEXT=desktop-linux docker build` and run the image with
+  `-p 127.0.0.1:18080:8080`.
 
 ## 6. Container Health widget (umbrelOS)
 
@@ -427,15 +442,15 @@ The status page refreshes every 15 seconds (only while it's visible) and shows:
   tunnel's `CLOUDFLARED_VERSION`, with the line to put in `.env` and `./deploy.sh tunnel`. The
   version chip in Projects gets an arrow linking to the release notes. More pinned images can
   be added to `UPDATE_CHECKS` in `server.mjs.template`.
-- **Resource map**: which apps use which LocalInfra resource (Postgres, Redis, S3, the LLM
-  gateway, the Cloudflare tunnel), read from the networks each container joins. LocalInfra's own
+- **Resource map**: which apps use which local-infra resource (Postgres, Redis, S3, the LLM
+  gateway, the Cloudflare tunnel), read from the networks each container joins. local-infra's own
   containers (like `localinfra-backup`, on the Postgres network to dump it) are left out. Hover a node to highlight its
   links. When an app has the label `localinfra.url=https://...` (the app template sets it from
   `NEXT_PUBLIC_APP_URL`), the map shows the app's own icon, linking to that address. The server
   reads the icon from the app's `<link rel="icon">` (SVG first, then a small PNG, then
   `/favicon.ico`), keeps it for 12 hours, and shows a globe while the app can't be reached.
 - **Projects**: every container with its status, resources, public address and memory
-  (used / limit), LocalInfra included.
+  (used / limit), local-infra included.
 - **Metrics**: for each app that sends them (section 4, [Metrics](#metrics)), the views, the
   Web Vitals and in-app navigation time at the 75th percentile (green, amber, red by the Web
   Vitals thresholds), the busiest routes and the newest errors, for 24 hours, 7 days or 30 days,
@@ -487,8 +502,8 @@ Docker Hub. The brand logos are inline SVG (Simple Icons, CC0), not fetched.
 
 ### Install (once, in the Umbrel UI)
 
-1. App Store → `⋯` (top right) → **Community App Stores** → add `https://github.com/LKhoe/LocalInfra`
-2. Open the **LocalInfra** store → **Container Health** → **Install**
+1. App Store → `⋯` (top right) → **Community App Stores** → add `https://github.com/LKhoe/local-infra`
+2. Open the **local-infra** store → **Container Health** → **Install**
 3. Home screen → right-click (or long-press) → **Edit widgets** → pick the
    Container Health widgets you want. umbrelOS allows 3 widgets in total.
 

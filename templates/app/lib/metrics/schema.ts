@@ -1,6 +1,6 @@
 // Light, anonymous usage metrics: what the browser may send to /api/metrics. The same rules as
-// LocalInfra/metrics/schema.mjs, which checks everything again. Copied from
-// LocalInfra/templates/app/lib/metrics/ (keep the copies in sync).
+// local-infra/metrics/schema.mjs, which checks everything again. Copied from
+// local-infra/templates/app/lib/metrics/ (keep the copies in sync).
 //
 //   { v: 1, device: "mobile" | "desktop",
 //     events: [ { t: "view",  route }

@@ -1,4 +1,4 @@
-// LocalInfra LLM gateway: one OpenAI-compatible endpoint for every app on the Pi.
+// local-infra LLM gateway: one OpenAI-compatible endpoint for every app on the Pi.
 //
 //   POST /v1/chat/completions   model = "simple" | "medium" | "hard" (the tier, never a model name)
 //   GET  /v1/models             the tiers and the models behind them
@@ -121,7 +121,7 @@ export function createGateway(config, store = openStore(config.dbPath, config.de
     const models = config.tiers[tier];
     return postJson(
       config.openrouterUrl + "/chat/completions",
-      { Authorization: "Bearer " + config.openrouterKey, "X-Title": "LocalInfra " + app.name },
+      { Authorization: "Bearer " + config.openrouterKey, "X-Title": "local-infra " + app.name },
       // "models": OpenRouter tries them in order when one is down or rate-limited
       { ...payload, model: models[0], models, usage: { include: true }, user: app.name },
       tier === "simple" ? config.timeouts.free : config.timeouts.paid,

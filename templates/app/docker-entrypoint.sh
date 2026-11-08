@@ -1,5 +1,5 @@
 #!/bin/sh
-# Template: LocalInfra/templates/app/docker-entrypoint.sh — waits for Postgres, migrates, starts.
+# Template: local-infra/templates/app/docker-entrypoint.sh — waits for Postgres, migrates, starts.
 set -e
 
 echo "========================================"

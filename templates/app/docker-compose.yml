@@ -1,5 +1,5 @@
-# <APP> — app only. Postgres / Redis / S3 come from LocalInfra (start it first).
-# Template: LocalInfra/templates/app/docker-compose.yml — see LocalInfra/DEPLOYING-APPS.md.
+# <APP> — app only. Postgres / Redis / S3 come from local-infra (start it first).
+# Template: local-infra/templates/app/docker-compose.yml — see local-infra/DEPLOYING-APPS.md.
 #
 # Replace "myapp" everywhere with the app's name (kebab-case, e.g. my-recipes), pick a free host
 # port from the port table in DEPLOYING-APPS.md, and delete the blocks the app doesn't use.
@@ -23,7 +23,7 @@ services:
       # LAN access (http://umbrel.local:<PORT>). The tunnel doesn't use it. Unique per app.
       - "${PORT:-30XX}:3000"
     environment:
-      # ---- LocalInfra: written into .env by LocalInfra/scripts/provision-app.sh
+      # ---- local-infra: written into .env by local-infra/scripts/provision-app.sh
       - DATABASE_URL=${DATABASE_URL:?set DATABASE_URL in .env}
       - POSTGRES_HOST=${POSTGRES_HOST:-localinfra-postgres}
       - POSTGRES_PORT=${POSTGRES_PORT:-5432}
@@ -66,7 +66,7 @@ services:
       - localinfra_s3
       - localinfra_llm
       - localinfra_metrics
-      # Public access through LocalInfra's Cloudflare tunnel: http://myapp:3000
+      # Public access through local-infra's Cloudflare tunnel: http://myapp:3000
       - localinfra_tunnel
     deploy:
       resources:
@@ -79,7 +79,7 @@ services:
         max-file: "3"
 
 networks:
-  # Created by LocalInfra (start it first). Keep only the ones listed above.
+  # Created by local-infra (start it first). Keep only the ones listed above.
   localinfra_postgres:
     external: true
   localinfra_redis:
