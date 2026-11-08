@@ -16,7 +16,7 @@
     const TEXT = title.querySelector(".title-text").textContent.trim();
     const REST = [228, 231, 235];      // particle colour at rest
     const HOT = [159, 176, 196];       // colour while moving (muted steel blue)
-    const opts = { gather: 1600, stagger: 420, scatter: 190, repel: 42, radius: 120, drift: 0.8, size: 2.2 };
+    const opts = { gather: 1200, stagger: 380, scatter: 190, repel: 42, radius: 110, drift: 0.7, size: 2.2 };
     let parts = [], W = 0, H = 0, dpr = 1, start = 0, raf = 0, running = false;
     const ptr = { x: -1e4, y: -1e4 };
 
@@ -33,6 +33,7 @@
       const pad = 24;
       W = Math.min(Math.ceil(m.width) + pad * 2, title.clientWidth || window.innerWidth);
       H = Math.ceil(fontSize * 1.35);
+      if (!(W > 0 && H > 0)) return false;   // not laid out yet (e.g. a background tab): retry later
       canvas.width = W * dpr; canvas.height = H * dpr;
       canvas.style.width = W + "px"; canvas.style.height = H + "px";
 
@@ -60,50 +61,69 @@
         }
       }
       start = performance.now();
+      return true;
     }
 
+    function init(tries = 0) {
+      if (build()) run();
+      else if (tries < 50) setTimeout(() => init(tries + 1), 200);
+    }
+
+    let last = 0, visible = true;
     function frame(now) {
+      // Physics in "60 fps frames" of real time, so motion keeps its speed when frames drop.
+      const dt = last ? Math.max(0, Math.min((now - last) / 16.667, 3)) : 1;
+      last = now;
       const t = now - start;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, W, H);
-      const restPath = new Path2D(), hotPath = new Path2D();
+      const restPath = new Path2D(), hotPath = new Path2D(), glowPath = new Path2D();
       const r = opts.size / 2;
-      const k = 0.045 + Math.min(t / opts.gather, 1) * 0.03;   // spring stiffens as the text forms
-      let moving = 0;
+      const k = (0.06 + Math.min(t / opts.gather, 1) * 0.04) * dt;  // spring stiffens as the text forms
+      const damp = Math.pow(0.8, dt);
+      const R2 = opts.radius * opts.radius;
+      const near = ptr.x > -opts.radius && ptr.x < W + opts.radius && ptr.y > -opts.radius && ptr.y < H + opts.radius;
       for (const p of parts) {
         if (!reduce && t > p.delay) {
           const dx = opts.drift * Math.sin(now / 900 + p.ph), dy = opts.drift * Math.cos(now / 1100 + p.ph);
           p.vx += (p.tx + dx - p.x) * k;
           p.vy += (p.ty + dy - p.y) * k;
-          const ex = p.x - ptr.x, ey = p.y - ptr.y, d2 = ex * ex + ey * ey;
-          if (d2 < opts.radius * opts.radius && d2 > 0.01) {
-            const d = Math.sqrt(d2), f = (1 - d / opts.radius) * opts.repel * 0.06;
-            p.vx += (ex / d) * f; p.vy += (ey / d) * f;
+          if (near) {
+            const ex = p.x - ptr.x, ey = p.y - ptr.y, d2 = ex * ex + ey * ey;
+            if (d2 < R2 && d2 > 0.01) {
+              const d = Math.sqrt(d2), f = (1 - d / opts.radius) * opts.repel * 0.08 * dt;
+              p.vx += (ex / d) * f; p.vy += (ey / d) * f;
+            }
           }
-          p.vx *= 0.82; p.vy *= 0.82;
-          p.x += p.vx; p.y += p.vy;
+          p.vx *= damp; p.vy *= damp;
+          p.x += p.vx * dt; p.y += p.vy * dt;
         }
         const off = Math.abs(p.x - p.tx) + Math.abs(p.y - p.ty);
-        const path = off > 3 ? hotPath : restPath;
-        if (off > 3) moving++;
-        path.moveTo(p.x + r, p.y);
-        path.arc(p.x, p.y, r, 0, Math.PI * 2);
+        if (off > 3) {
+          hotPath.moveTo(p.x + r, p.y); hotPath.arc(p.x, p.y, r, 0, Math.PI * 2);
+          glowPath.moveTo(p.x + r * 2.6, p.y); glowPath.arc(p.x, p.y, r * 2.6, 0, Math.PI * 2);
+        } else {
+          restPath.moveTo(p.x + r, p.y); restPath.arc(p.x, p.y, r, 0, Math.PI * 2);
+        }
       }
       ctx.fillStyle = `rgb(${REST})`;
       ctx.fill(restPath);
-      ctx.save();
+      ctx.fillStyle = `rgba(${HOT}, 0.16)`;   // cheap glow (shadowBlur is slow on big paths)
+      ctx.fill(glowPath);
       ctx.fillStyle = `rgb(${HOT})`;
-      ctx.shadowColor = `rgba(${HOT}, 0.8)`;
-      ctx.shadowBlur = 8;
       ctx.fill(hotPath);
-      ctx.restore();
-      if (reduce) { running = false; return; }
+      if (reduce || !visible) { running = false; return; }
       raf = requestAnimationFrame(frame);
     }
 
+    // Pause while the title is scrolled out of view.
+    if ("IntersectionObserver" in window) {
+      new IntersectionObserver(([e]) => { visible = e.isIntersecting; if (visible) run(); }).observe(canvas);
+    }
+
     function run() {
-      if (running) return;
-      running = true;
+      if (running || !parts.length) return;
+      running = true; last = 0;
       raf = requestAnimationFrame(frame);
     }
 
@@ -128,13 +148,13 @@
     }
 
     const ready = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
-    ready.then(() => { build(); run(); });
+    ready.then(() => init());
     let lastW = window.innerWidth, rt = 0;
     window.addEventListener("resize", () => {
       if (window.innerWidth === lastW) return;   // ignore mobile URL-bar height changes
       lastW = window.innerWidth;
       clearTimeout(rt);
-      rt = setTimeout(() => { build(); if (reduce) frame(performance.now()); else run(); }, 150);
+      rt = setTimeout(() => { if (build()) { if (reduce) frame(performance.now()); else run(); } }, 150);
     });
   }
 
