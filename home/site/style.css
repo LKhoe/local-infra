@@ -23,14 +23,14 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 
 /* ---------- background layers ---------- */
 .sky { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
-.aurora { position: fixed; inset: -20%; z-index: 0; pointer-events: none; filter: blur(70px); opacity: 0.55; }
+.aurora { position: fixed; inset: -20%; z-index: 0; pointer-events: none; filter: blur(80px); opacity: 0.32; }
 .aurora span {
   position: absolute; width: 45vmax; height: 45vmax; border-radius: 50%;
   mix-blend-mode: screen; animation: drift 22s ease-in-out infinite alternate;
 }
-.aurora span:nth-child(1) { background: #6d28d9; top: 5%; left: 10%; }
-.aurora span:nth-child(2) { background: #0891b2; top: 30%; right: 5%; animation-duration: 28s; animation-delay: -6s; }
-.aurora span:nth-child(3) { background: #db2777; bottom: 0; left: 35%; animation-duration: 34s; animation-delay: -12s; opacity: 0.6; }
+.aurora span:nth-child(1) { background: #4c1d95; top: 5%; left: 10%; }
+.aurora span:nth-child(2) { background: #1e3a8a; top: 30%; right: 5%; animation-duration: 28s; animation-delay: -6s; }
+.aurora span:nth-child(3) { background: #831843; bottom: 0; left: 35%; animation-duration: 34s; animation-delay: -12s; opacity: 0.6; }
 @keyframes drift {
   0%   { transform: translate(0, 0) scale(1) rotate(0deg); }
   50%  { transform: translate(8vw, -6vh) scale(1.15) rotate(40deg); }
@@ -59,14 +59,25 @@ a:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
   width: 128px; height: 128px;
   animation: float 6s ease-in-out infinite, pop 0.9s cubic-bezier(.2,1.4,.3,1) both;
 }
-.logo { position: relative; border-radius: 22px; box-shadow: 0 0 40px rgb(125 211 252 / 35%), 0 0 90px rgb(167 139 250 / 25%); }
+.logo { position: relative; border-radius: 22px; box-shadow: 0 0 0 1px rgb(255 255 255 / 8%), 0 0 50px rgb(200 210 255 / 18%); }
+/* An orbit: a faint fixed track, and a small star with a fading trail circling the logo. */
+.logo-wrap::before {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  border: 1px solid rgb(220 228 255 / 10%);
+}
 .ring {
   position: absolute; inset: 0; border-radius: 50%;
-  background: conic-gradient(from 0deg, #7dd3fc, #a78bfa, #f472b6, #fbbf24, #34d399, #7dd3fc);
-  -webkit-mask: radial-gradient(circle, transparent 58%, #000 60%, #000 63%, transparent 65%);
-          mask: radial-gradient(circle, transparent 58%, #000 60%, #000 63%, transparent 65%);
-  animation: spin 7s linear infinite;
-  filter: drop-shadow(0 0 8px rgb(167 139 250 / 80%));
+  background: conic-gradient(from 0deg, transparent 0 62%, rgb(220 228 255 / 0%) 62%, rgb(230 236 255 / 75%) 100%);
+  -webkit-mask: radial-gradient(circle closest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px), #000 100%, transparent 100%);
+          mask: radial-gradient(circle closest-side, transparent calc(100% - 2px), #000 calc(100% - 1.5px), #000 100%, transparent 100%);
+  animation: spin 9s linear infinite;
+}
+/* the star at the head of the trail (separate element so the mask doesn't clip it) */
+.ring + .logo { z-index: 1; }
+.logo-wrap::after {
+  content: ""; position: absolute; top: -2.5px; left: calc(50% - 3px); width: 6px; height: 6px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 6px 2px rgb(255 255 255 / 85%), 0 0 18px 4px rgb(165 180 252 / 60%);
+  transform-origin: 3px 66.5px; animation: spin 9s linear infinite;
 }
 @keyframes spin { to { transform: rotate(1turn); } }
 @keyframes float { 0%, 100% { translate: 0 0; } 50% { translate: 0 -10px; } }
