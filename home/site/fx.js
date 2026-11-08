@@ -1,159 +1,153 @@
-// Visual effects for www.khoe.dev: starfield, card tilt/spotlight, cursor glow and the
-// "warp" transition when leaving for an app. No data is sent anywhere; the page works without it.
+// Effects for www.khoe.dev: particle title, card tilt/spotlight and the water transition when
+// leaving for an app. Nothing is sent anywhere; without this script the page still works.
 (() => {
   "use strict";
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   const finePointer = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
   const root = document.documentElement;
 
-  // ---- starfield with constellations that follow the pointer
-  const canvas = document.querySelector(".sky");
+  // ---------------------------------------------------------------- particle title
+  // The text is sampled from an offscreen canvas; each lit pixel (every `step` px) becomes a
+  // particle that gathers into place, is pushed by the pointer, bursts on click and drifts at rest.
+  const title = document.querySelector(".title");
+  const canvas = document.querySelector(".title-canvas");
   const ctx = canvas && canvas.getContext("2d");
-  let stars = [], galaxy = [], w = 0, h = 0, dpr = 1, raf = 0;
-  const G = { x: 0, y: 0, R: 0, tilt: -0.38, flat: 0.42 };
-  const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5;
+  if (title && ctx) {
+    const TEXT = title.querySelector(".title-text").textContent.trim();
+    const REST = [228, 231, 235];      // particle colour at rest
+    const HOT = [159, 176, 196];       // colour while moving (muted steel blue)
+    const opts = { gather: 1600, stagger: 420, scatter: 190, repel: 42, radius: 120, drift: 0.8, size: 2.2 };
+    let parts = [], W = 0, H = 0, dpr = 1, start = 0, raf = 0, running = false;
+    const ptr = { x: -1e4, y: -1e4 };
 
-  // Spiral galaxy off to the side of the content: two main arms + two faint ones, inner stars orbit faster.
-  function buildGalaxy() {
-    const wide = w >= 720;
-    G.x = wide ? w * 0.74 : w * 0.62; G.y = wide ? h * 0.3 : h * 0.2;
-    G.R = Math.max(w, h) * (wide ? 0.4 : 0.5);
-    const count = Math.min(2200, Math.round((w * h) / 600));
-    const arms = 4;
-    galaxy = Array.from({ length: count }, () => {
-      const arm = Math.floor(Math.random() * arms);
-      const k = Math.pow(Math.random(), 1.7);                  // denser near the core
-      const r = G.R * k;
-      const spread = (0.32 * (1 - k) + 0.08) * (arm % 2 ? 1.5 : 1);
-      const theta = (arm / arms) * Math.PI * 2 + k * 4.2 + gauss() * spread;
-      const warm = k < 0.18;
-      const hue = warm ? 40 + Math.random() * 15 : [215, 235, 265, 290, 320][Math.floor(Math.random() * 5)];
-      return {
-        r: r + gauss() * 6, theta,
-        speed: 0.00055 * (1.25 - k * 0.8),
-        size: Math.random() < 0.05 ? 2 : Math.random() * 1.1 + 0.6,
-        a: (warm ? 0.95 : 0.85) * (arm % 2 ? 0.5 : 1) * (1 - k * 0.5),
-        color: `hsl(${hue}, ${warm ? 90 : 85}%, ${warm ? 82 : 72}%)`,
-      };
-    });
-  }
+    root.classList.add("particles");
 
-  function drawGalaxy() {
-    const cos = Math.cos(G.tilt), sin = Math.sin(G.tilt);
-    ctx.save();
-    ctx.globalCompositeOperation = "lighter";
-    // dust / nebula haze along the disc
-    ctx.save();
-    ctx.translate(G.x, G.y); ctx.rotate(G.tilt); ctx.scale(1, G.flat);
-    let g = ctx.createRadialGradient(0, 0, 0, 0, 0, G.R * 0.9);
-    g.addColorStop(0, "rgba(150, 120, 255, 0.28)");
-    g.addColorStop(0.4, "rgba(90, 70, 210, 0.12)");
-    g.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, G.R * 0.9, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-    for (const p of galaxy) {
-      if (!reduce) p.theta += p.speed;
-      const ex = Math.cos(p.theta) * p.r, ey = Math.sin(p.theta) * p.r * G.flat;
-      const x = G.x + ex * cos - ey * sin, y = G.y + ex * sin + ey * cos;
-      if (x < -4 || x > w + 4 || y < -4 || y > h + 4) continue;
-      ctx.globalAlpha = p.a;
-      ctx.fillStyle = p.color;
-      ctx.fillRect(x, y, p.size, p.size);
-    }
-    // bright core
-    ctx.globalAlpha = 1;
-    g = ctx.createRadialGradient(G.x, G.y, 0, G.x, G.y, G.R * 0.2);
-    g.addColorStop(0, "rgba(255, 245, 225, 0.9)");
-    g.addColorStop(0.15, "rgba(255, 215, 170, 0.45)");
-    g.addColorStop(0.5, "rgba(220, 150, 200, 0.12)");
-    g.addColorStop(1, "rgba(0, 0, 0, 0)");
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(G.x, G.y, G.R * 0.2, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-  }
-  const pointer = { x: -9999, y: -9999 };
+    function build() {
+      const cs = getComputedStyle(title);
+      const fontSize = parseFloat(cs.fontSize);
+      const font = `${cs.fontWeight} ${fontSize}px ${cs.fontFamily}`;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      // measure the text to size the canvas
+      ctx.font = font;
+      const m = ctx.measureText(TEXT);
+      const pad = 24;
+      W = Math.min(Math.ceil(m.width) + pad * 2, title.clientWidth || window.innerWidth);
+      H = Math.ceil(fontSize * 1.35);
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      canvas.style.width = W + "px"; canvas.style.height = H + "px";
 
-  function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    w = window.innerWidth; h = window.innerHeight;
-    canvas.width = w * dpr; canvas.height = h * dpr;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const count = Math.min(140, Math.round((w * h) / 9000));
-    stars = Array.from({ length: count }, () => ({
-      x: Math.random() * w, y: Math.random() * h,
-      vx: (Math.random() - 0.5) * 0.15, vy: (Math.random() - 0.5) * 0.15,
-      r: Math.random() * 1.4 + 0.3, t: Math.random() * Math.PI * 2,
-      hue: [200, 220, 250, 40][Math.floor(Math.random() * 4)],
-    }));
-    buildGalaxy();
-  }
-
-  function draw(time) {
-    ctx.clearRect(0, 0, w, h);
-    drawGalaxy();
-    for (const s of stars) {
-      if (!reduce) {
-        s.x += s.vx; s.y += s.vy;
-        // pointer gently attracts nearby stars
-        const dx = pointer.x - s.x, dy = pointer.y - s.y, d2 = dx * dx + dy * dy;
-        if (d2 < 160 * 160) { s.x += dx * 0.004; s.y += dy * 0.004; }
-        if (s.x < -10) s.x = w + 10; else if (s.x > w + 10) s.x = -10;
-        if (s.y < -10) s.y = h + 10; else if (s.y > h + 10) s.y = -10;
-      }
-      const tw = reduce ? 0.8 : 0.55 + 0.45 * Math.sin(time / 700 + s.t);
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${s.hue}, 60%, 88%, ${tw})`;
-      ctx.fill();
-    }
-    // constellation lines between stars close to the pointer
-    for (let i = 0; i < stars.length; i++) {
-      const a = stars[i];
-      const pa = Math.hypot(pointer.x - a.x, pointer.y - a.y);
-      if (pa > 180) continue;
-      for (let j = i + 1; j < stars.length; j++) {
-        const b = stars[j], d = Math.hypot(a.x - b.x, a.y - b.y);
-        if (d < 110) {
-          ctx.strokeStyle = `rgba(167, 139, 250, ${(1 - d / 110) * (1 - pa / 180) * 0.8})`;
-          ctx.lineWidth = 0.7;
-          ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      // sample glyph pixels
+      const off = document.createElement("canvas");
+      off.width = W; off.height = H;
+      const o = off.getContext("2d");
+      o.font = font; o.textAlign = "center"; o.textBaseline = "middle"; o.fillStyle = "#fff";
+      o.fillText(TEXT, W / 2, H / 2 + fontSize * 0.04);
+      const data = o.getImageData(0, 0, W, H).data;
+      const step = W < 360 ? 3 : 4;
+      parts = [];
+      for (let y = 0; y < H; y += step) {
+        for (let x = 0; x < W; x += step) {
+          if (data[(y * W + x) * 4 + 3] > 140) {
+            const a = Math.random() * Math.PI * 2, d = opts.scatter * (0.4 + Math.random() * 0.6);
+            parts.push({
+              tx: x, ty: y,
+              x: reduce ? x : x + Math.cos(a) * d, y: reduce ? y : y + Math.sin(a) * d,
+              vx: 0, vy: 0,
+              delay: Math.random() * opts.stagger,
+              ph: Math.random() * Math.PI * 2,
+            });
+          }
         }
       }
+      start = performance.now();
     }
-    if (!reduce) raf = requestAnimationFrame(draw);
-  }
 
-  if (ctx) {
-    resize();
-    window.addEventListener("resize", () => { resize(); if (reduce) draw(0); });
-    if (reduce) draw(0); else raf = requestAnimationFrame(draw);
-    document.addEventListener("visibilitychange", () => {
-      if (reduce) return;
-      cancelAnimationFrame(raf);
-      if (!document.hidden) raf = requestAnimationFrame(draw);
+    function frame(now) {
+      const t = now - start;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      const restPath = new Path2D(), hotPath = new Path2D();
+      const r = opts.size / 2;
+      const k = 0.045 + Math.min(t / opts.gather, 1) * 0.03;   // spring stiffens as the text forms
+      let moving = 0;
+      for (const p of parts) {
+        if (!reduce && t > p.delay) {
+          const dx = opts.drift * Math.sin(now / 900 + p.ph), dy = opts.drift * Math.cos(now / 1100 + p.ph);
+          p.vx += (p.tx + dx - p.x) * k;
+          p.vy += (p.ty + dy - p.y) * k;
+          const ex = p.x - ptr.x, ey = p.y - ptr.y, d2 = ex * ex + ey * ey;
+          if (d2 < opts.radius * opts.radius && d2 > 0.01) {
+            const d = Math.sqrt(d2), f = (1 - d / opts.radius) * opts.repel * 0.06;
+            p.vx += (ex / d) * f; p.vy += (ey / d) * f;
+          }
+          p.vx *= 0.82; p.vy *= 0.82;
+          p.x += p.vx; p.y += p.vy;
+        }
+        const off = Math.abs(p.x - p.tx) + Math.abs(p.y - p.ty);
+        const path = off > 3 ? hotPath : restPath;
+        if (off > 3) moving++;
+        path.moveTo(p.x + r, p.y);
+        path.arc(p.x, p.y, r, 0, Math.PI * 2);
+      }
+      ctx.fillStyle = `rgb(${REST})`;
+      ctx.fill(restPath);
+      ctx.save();
+      ctx.fillStyle = `rgb(${HOT})`;
+      ctx.shadowColor = `rgba(${HOT}, 0.8)`;
+      ctx.shadowBlur = 8;
+      ctx.fill(hotPath);
+      ctx.restore();
+      if (reduce) { running = false; return; }
+      raf = requestAnimationFrame(frame);
+    }
+
+    function run() {
+      if (running) return;
+      running = true;
+      raf = requestAnimationFrame(frame);
+    }
+
+    function toLocal(e) {
+      const b = canvas.getBoundingClientRect();
+      return { x: e.clientX - b.left, y: e.clientY - b.top };
+    }
+    if (!reduce) {
+      window.addEventListener("pointermove", (e) => { const p = toLocal(e); ptr.x = p.x; ptr.y = p.y; }, { passive: true });
+      document.addEventListener("pointerleave", () => { ptr.x = ptr.y = -1e4; });
+      canvas.addEventListener("pointerdown", (e) => {
+        const c = toLocal(e), R = opts.radius * 2;
+        for (const p of parts) {
+          const ex = p.x - c.x, ey = p.y - c.y, d = Math.hypot(ex, ey) || 1;
+          if (d < R) { const f = (1 - d / R) * 22; p.vx += (ex / d) * f; p.vy += (ey / d) * f; }
+        }
+      });
+      document.addEventListener("visibilitychange", () => {
+        cancelAnimationFrame(raf); running = false;
+        if (!document.hidden) run();
+      });
+    }
+
+    const ready = document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve();
+    ready.then(() => { build(); run(); });
+    let lastW = window.innerWidth, rt = 0;
+    window.addEventListener("resize", () => {
+      if (window.innerWidth === lastW) return;   // ignore mobile URL-bar height changes
+      lastW = window.innerWidth;
+      clearTimeout(rt);
+      rt = setTimeout(() => { build(); if (reduce) frame(performance.now()); else run(); }, 150);
     });
   }
 
-  // ---- pointer: glow, tilt and spotlight (mouse/trackpad only)
+  // ---------------------------------------------------------------- card tilt + spotlight
   if (finePointer && !reduce) {
-    window.addEventListener("pointermove", (e) => {
-      pointer.x = e.clientX; pointer.y = e.clientY;
-      root.classList.add("has-pointer");
-      root.style.setProperty("--gx", e.clientX + "px");
-      root.style.setProperty("--gy", e.clientY + "px");
-    }, { passive: true });
-    document.addEventListener("pointerleave", () => {
-      pointer.x = pointer.y = -9999;
-      root.classList.remove("has-pointer");
-    });
-
     document.querySelectorAll(".card").forEach((card) => {
       card.addEventListener("pointermove", (e) => {
         const r = card.getBoundingClientRect();
         const px = (e.clientX - r.left) / r.width, py = (e.clientY - r.top) / r.height;
         card.style.setProperty("--mx", px * 100 + "%");
         card.style.setProperty("--my", py * 100 + "%");
-        card.style.setProperty("--ry", (px - 0.5) * 14 + "deg");
-        card.style.setProperty("--rx", (0.5 - py) * 14 + "deg");
+        card.style.setProperty("--ry", (px - 0.5) * 10 + "deg");
+        card.style.setProperty("--rx", (0.5 - py) * 10 + "deg");
       });
       card.addEventListener("pointerleave", () => {
         card.style.setProperty("--rx", "0deg");
@@ -162,39 +156,36 @@
     });
   }
 
-  // ---- leaving: warp from the clicked card into the app's colours, then navigate
-  const warp = document.querySelector(".warp");
-  const label = document.querySelector(".warp-label");
+  // ---------------------------------------------------------------- leaving: water dissolve
+  const melt = document.getElementById("melt-map");
+  const label = document.querySelector(".veil-label");
   let leaving = false;
 
   document.querySelectorAll(".card, .github").forEach((link) => {
     link.addEventListener("click", (e) => {
-      // new tab / window / download: let the browser do its thing
       if (reduce || leaving || e.defaultPrevented || e.button !== 0 ||
           e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       e.preventDefault();
       leaving = true;
-
-      const r = link.getBoundingClientRect();
-      const cs = getComputedStyle(link);
-      warp.style.setProperty("--wx", r.left + r.width / 2 + "px");
-      warp.style.setProperty("--wy", r.top + r.height / 2 + "px");
-      warp.style.setProperty("--c", cs.getPropertyValue("--c"));
-      warp.style.setProperty("--c2", cs.getPropertyValue("--c2"));
       const name = link.querySelector(".name");
       label.textContent = name ? name.textContent : "GitHub";
-
-      link.classList.add("chosen");
       root.classList.add("leaving");
-      setTimeout(() => { window.location.href = link.href; }, 850);
+      const t0 = performance.now(), dur = 900;
+      const step = (now) => {
+        const k = Math.min((now - t0) / dur, 1);
+        if (melt) melt.setAttribute("scale", String(Math.round(180 * k * k)));
+        if (k < 1 && leaving) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+      setTimeout(() => { window.location.href = link.href; }, 1000);
     });
   });
 
-  // Back button (bfcache): undo the warp so the page isn't stuck covered.
+  // Back button (bfcache): undo the transition so the page isn't left dissolved.
   window.addEventListener("pageshow", (e) => {
     if (!e.persisted) return;
     leaving = false;
     root.classList.remove("leaving");
-    document.querySelectorAll(".chosen").forEach((el) => el.classList.remove("chosen"));
+    if (melt) melt.setAttribute("scale", "0");
   });
 })();
