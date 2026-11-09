@@ -62,6 +62,18 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
+    # Hardening: no capabilities, no privilege escalation, read-only root filesystem. The app
+    # runs as nextjs (uid/gid 1001). It can only write to the tmpfs below, which are lost on
+    # restart: data belongs in Postgres / S3. If the app writes elsewhere (uploads staging, a
+    # cache dir, another library's temp), add another tmpfs line with the same uid/gid.
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:uid=1001,gid=1001,mode=1777,size=64m
+      - /app/.next/cache:uid=1001,gid=1001,size=128m
     networks:
       - localinfra_postgres
       - localinfra_redis
