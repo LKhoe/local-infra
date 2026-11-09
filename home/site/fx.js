@@ -16,13 +16,15 @@
     const TEXT = title.querySelector(".title-text").textContent.trim();
     const REST = [228, 231, 235];      // particle colour at rest
     const HOT = [159, 176, 196];       // colour while moving (muted steel blue)
-    const opts = { gather: 1200, stagger: 380, scatter: 190, repel: 42, radius: 110, drift: 0.7, size: 2.2 };
-    let parts = [], W = 0, H = 0, dpr = 1, start = 0, raf = 0, running = false;
+    const opts = { gather: 1800, pour: 1100, drip: 380, repel: 42, radius: 110, drift: 0.7, size: 2.2 };
+    let parts = [], W = 0, H = 0, CH = 0, dpr = 1, start = 0, raf = 0, running = false, played = false;
+    const logo = document.querySelector(".logo");
     const ptr = { x: -1e4, y: -1e4 };
 
     root.classList.add("particles");
 
-    function build() {
+    // intro: the first time, particles pour out of the logo; later rebuilds (resize) just redraw.
+    function build(intro = !played) {
       const cs = getComputedStyle(title);
       const fontSize = parseFloat(cs.fontSize);
       const font = `${cs.fontWeight} ${fontSize}px ${cs.fontFamily}`;
@@ -30,12 +32,26 @@
       // measure the text to size the canvas
       ctx.font = font;
       const m = ctx.measureText(TEXT);
-      const pad = 24;
-      W = Math.min(Math.ceil(m.width) + pad * 2, title.clientWidth || window.innerWidth);
+      // full content width, so particles flying out to the sides are never clipped
+      W = title.clientWidth || window.innerWidth;
       H = Math.ceil(fontSize * 1.35);
       if (!(W > 0 && H > 0)) return false;   // not laid out yet (e.g. a background tab): retry later
-      canvas.width = W * dpr; canvas.height = H * dpr;
+
+      // The canvas grows upward (negative margin, so the layout doesn't move) until it covers the
+      // logo: the particles start behind the logo and drip out of it into the letters.
+      canvas.style.marginTop = "0px";
       canvas.style.width = W + "px"; canvas.style.height = H + "px";
+      const cr = canvas.getBoundingClientRect();
+      const lr = logo ? logo.getBoundingClientRect() : null;
+      const extra = lr && lr.width ? Math.max(0, Math.round(cr.top - (lr.top + lr.height * 0.25))) : 0;
+      const below = 70;                       // room under the text for drops that overshoot
+      CH = H + extra + below;
+      canvas.width = W * dpr; canvas.height = CH * dpr;
+      canvas.style.height = CH + "px"; canvas.style.marginTop = -extra + "px"; canvas.style.marginBottom = -below + "px";
+      // logo box in canvas coordinates
+      const L = lr && lr.width
+        ? { x: lr.left + lr.width / 2 - cr.left, top: lr.top - cr.top + extra, w: lr.width, h: lr.height }
+        : { x: W / 2, top: 0, w: W / 3, h: extra || H / 2 };
 
       // sample glyph pixels
       const off = document.createElement("canvas");
@@ -49,12 +65,16 @@
       for (let y = 0; y < H; y += step) {
         for (let x = 0; x < W; x += step) {
           if (data[(y * W + x) * 4 + 3] > 140) {
-            const a = Math.random() * Math.PI * 2, d = opts.scatter * (0.4 + Math.random() * 0.6);
+            const ty = y + extra;
+            const pour = intro && !reduce;
             parts.push({
-              tx: x, ty: y,
-              x: reduce ? x : x + Math.cos(a) * d, y: reduce ? y : y + Math.sin(a) * d,
-              vx: 0, vy: 0,
-              delay: Math.random() * opts.stagger,
+              tx: x, ty,
+              // start inside the lower half of the logo (hidden behind it), slightly spread
+              x: pour ? L.x + (Math.random() - 0.5) * L.w * 0.6 : x,
+              y: pour ? L.top + L.h * (0.55 + Math.random() * 0.4) : ty,
+              vx: pour ? (Math.random() - 0.5) * 0.8 : 0,
+              vy: pour ? 1 + Math.random() * 1.5 : 0,
+              delay: pour ? Math.random() * opts.pour : 0,
               ph: Math.random() * Math.PI * 2,
             });
           }
@@ -62,6 +82,11 @@
       }
       makeSprites();
       start = performance.now();
+      if (intro && !reduce && logo) {
+        played = true;
+        logo.classList.add("pouring");
+        setTimeout(() => logo.classList.remove("pouring"), opts.pour + opts.drip + 300);
+      }
       return true;
     }
 
@@ -102,14 +127,21 @@
       const k = (0.06 + Math.min(t / opts.gather, 1) * 0.04) * dt;  // spring stiffens as the text forms
       const damp = Math.pow(0.8, dt);
       const R2 = opts.radius * opts.radius;
-      const near = ptr.x > -opts.radius && ptr.x < W + opts.radius && ptr.y > -opts.radius && ptr.y < H + opts.radius;
+      const near = ptr.x > -opts.radius && ptr.x < W + opts.radius && ptr.y > -opts.radius && ptr.y < CH + opts.radius;
       const ds = dotRest.width / 2, gs = glow.width / 2;
       let moving = 0;
       for (const p of parts) {
         if (!reduce && t > p.delay) {
           const dx = opts.drift * Math.sin(now / 900 + p.ph), dy = opts.drift * Math.cos(now / 1100 + p.ph);
-          p.vx += (p.tx + dx - p.x) * k;
-          p.vy += (p.ty + dy - p.y) * k;
+          const age = t - p.delay;
+          if (age < opts.drip) {            // just left the logo: falls like a drop, spring barely pulls
+            p.vy += 0.22 * dt;
+            p.vx += (p.tx - p.x) * k * 0.15;
+            p.vy += (p.ty - p.y) * k * 0.15;
+          } else {
+            p.vx += (p.tx + dx - p.x) * k;
+            p.vy += (p.ty + dy - p.y) * k;
+          }
           if (near) {
             const ex = p.x - ptr.x, ey = p.y - ptr.y, d2 = ex * ex + ey * ey;
             if (d2 < R2 && d2 > 0.01) {
@@ -120,6 +152,7 @@
           p.vx *= damp; p.vy *= damp;
           p.x += p.vx * dt; p.y += p.vy * dt;
         }
+        if (t <= p.delay && !reduce) continue;   // still inside the logo
         const x = p.x * dpr, y = p.y * dpr;
         if (Math.abs(p.x - p.tx) + Math.abs(p.y - p.ty) > 3) {
           moving++;
@@ -131,7 +164,7 @@
       }
       // Once the text has formed and nothing is pushing it, stop redrawing (saves CPU/battery);
       // the pointer or a click starts it again.
-      calm = (!moving && !near && t > opts.gather + opts.stagger) ? calm + 1 : 0;
+      calm = (!moving && !near && t > opts.pour + opts.drip + 300) ? calm + 1 : 0;
       if (reduce || !visible || calm > 45) { running = false; return; }
       raf = requestAnimationFrame(frame);
     }
@@ -154,10 +187,10 @@
     if (!reduce) {
       window.addEventListener("pointermove", (e) => {
         const p = toLocal(e); ptr.x = p.x; ptr.y = p.y;
-        if (p.x > -opts.radius && p.x < W + opts.radius && p.y > -opts.radius && p.y < H + opts.radius) run();
+        if (p.x > -opts.radius && p.x < W + opts.radius && p.y > -opts.radius && p.y < CH + opts.radius) run();
       }, { passive: true });
       document.addEventListener("pointerleave", () => { ptr.x = ptr.y = -1e4; });
-      canvas.addEventListener("pointerdown", (e) => {
+      title.addEventListener("pointerdown", (e) => {   // the canvas itself ignores the pointer
         const c = toLocal(e), R = opts.radius * 2;
         for (const p of parts) {
           const ex = p.x - c.x, ey = p.y - c.y, d = Math.hypot(ex, ey) || 1;
