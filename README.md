@@ -39,7 +39,7 @@ local-infra/
 ```
 
 Everything is deployed **from the Mac** through a Docker context named `umbrel`, so
-the build runs on the Pi and nothing has to be copied there by hand. That's also why
+the image is built on the Mac, loaded into the Pi, and nothing has to be copied there by hand. That's also why
 there are no `./file` bind mounts: a relative path would point at a folder that only
 exists on the Mac.
 

@@ -4,16 +4,23 @@
 # Same file in every app — copied from local-infra/templates/app/deploy.sh; see
 # local-infra/DEPLOYING-APPS.md. Everything app-specific is read from docker-compose.yml.
 #
-#   ./deploy.sh              build what's in the working tree on the Pi, restart, wait for healthy
+#   ./deploy.sh              build what's in the working tree on this machine, send it to the Pi, restart, wait for healthy
 #   ./deploy.sh --release    first bump the patch version, commit and PUSH (needs package.json)
 #   ./deploy.sh --rollback   restart the image that was live before the last deploy
 #
-# Overridable: DEPLOY_CONTEXT (default "umbrel")
+# The image is built on THIS machine (linux/arm64, same as the Pi, so no emulation on Apple Silicon)
+# and streamed to the Pi with `docker save | docker load`; the Pi never builds. DEPLOY_BUILD=remote
+# goes back to building on the Pi.
+#
+# Overridable: DEPLOY_CONTEXT (default "umbrel"), BUILD_CONTEXT (local Docker context that builds,
+# default "desktop-linux"), DEPLOY_BUILD (local | remote, default local)
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
 export DOCKER_CONTEXT="${DEPLOY_CONTEXT:-umbrel}"
+BUILD_CONTEXT="${BUILD_CONTEXT:-desktop-linux}"
+DEPLOY_BUILD="${DEPLOY_BUILD:-local}"
 COMPOSE=(docker compose -f docker-compose.yml)
 
 die() { echo "❌ $*" >&2; exit 1; }
@@ -54,6 +61,26 @@ wait_healthy() {
   done
 }
 
+# `compose up` over SSH can be cut off half way (connection reset): compose renames the old
+# container to <hash>_<name> before creating the new one. Re-running `up` is idempotent, so retry;
+# and if the container is still left under the hash name, rename it back and start it.
+recreate() {
+  local attempt
+  for attempt in 1 2 3; do
+    "${COMPOSE[@]}" up -d --no-build "$SERVICE" && break
+    echo "Warning: 'compose up' failed (attempt ${attempt}/3), retrying in 10s..." >&2
+    sleep 10
+  done
+  if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
+    local stray
+    stray=$(docker ps -a --filter "label=com.docker.compose.service=${SERVICE}" --format '{{.Names}}' | grep -E "^[0-9a-f]+_${CONTAINER}\$" | head -1 || true)
+    [[ -n "$stray" ]] || die "No container named ${CONTAINER} after 'compose up' (see the errors above)."
+    echo "==> Container was left as ${stray}: renaming it to ${CONTAINER}."
+    docker rename "$stray" "$CONTAINER"
+    docker start "$CONTAINER" >/dev/null
+  fi
+}
+
 # Docker over a *shared* SSH connection (ControlMaster) hangs with no timeout when that connection
 # goes stale — it once froze a deploy mid-swap, old container stopped, new one not started.
 docker_host=$(docker context inspect "$DOCKER_CONTEXT" --format '{{.Endpoints.docker.Host}}' 2>/dev/null || true)
@@ -75,7 +102,8 @@ if [[ "${1:-}" == "--rollback" ]]; then
     || die "No ${IMAGE}:previous image on '${DOCKER_CONTEXT}' — nothing to roll back to."
   echo "==> Rolling back ${SERVICE} to ${IMAGE}:previous on '${DOCKER_CONTEXT}'..."
   docker tag "${IMAGE}:previous" "${IMAGE}:latest"
-  "${COMPOSE[@]}" up -d --no-build --force-recreate "$SERVICE"
+  "${COMPOSE[@]}" up -d --no-build --force-recreate "$SERVICE" || true
+  recreate
   wait_healthy
   exit 0
 fi
@@ -132,9 +160,23 @@ if docker image inspect "${IMAGE}:latest" >/dev/null 2>&1; then
   docker tag "${IMAGE}:latest" "${IMAGE}:previous"
 fi
 
-echo "==> Building ${SERVICE} on '${DOCKER_CONTEXT}' (the build runs there: several minutes on the Pi)..."
-"${COMPOSE[@]}" build "$SERVICE"
-"${COMPOSE[@]}" up -d "$SERVICE"
+if [[ "$DEPLOY_BUILD" == remote ]]; then
+  echo "==> Building ${SERVICE} on '${DOCKER_CONTEXT}' (the build runs there: several minutes on the Pi)..."
+  "${COMPOSE[@]}" build "$SERVICE"
+else
+  [[ "$(docker context inspect "$BUILD_CONTEXT" --format '{{.Endpoints.docker.Host}}' 2>/dev/null)" != ssh://* ]] \
+    || die "BUILD_CONTEXT '${BUILD_CONTEXT}' must be a local Docker context, not a remote one."
+  DOCKER_CONTEXT="$BUILD_CONTEXT" docker info >/dev/null 2>&1 \
+    || die "Local Docker context '${BUILD_CONTEXT}' is not reachable (is Docker Desktop running?)."
+  echo "==> Building ${SERVICE} (linux/arm64) on this machine, context '${BUILD_CONTEXT}'..."
+  DOCKER_CONTEXT="$BUILD_CONTEXT" docker build --platform linux/arm64 -t "${IMAGE}:latest" .
+  local_id=$(DOCKER_CONTEXT="$BUILD_CONTEXT" docker image inspect --format '{{.Id}}' "${IMAGE}:latest")
+  echo "==> Sending the image to '${DOCKER_CONTEXT}'..."
+  DOCKER_CONTEXT="$BUILD_CONTEXT" docker save "${IMAGE}:latest" | docker load >/dev/null
+  [[ "$(docker image inspect --format '{{.Id}}' "${IMAGE}:latest" 2>/dev/null)" == "$local_id" ]] \
+    || die "The image on '${DOCKER_CONTEXT}' doesn't match the one built here; nothing was restarted."
+fi
+recreate
 wait_healthy
 
 ELAPSED=$(( $(date +%s) - START_TIME ))
