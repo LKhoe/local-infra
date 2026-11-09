@@ -120,9 +120,9 @@ with the values for the app filled in and a copy button on each.
 ```
 
 It checks the target, the external networks and `.env` (warns about leftover local values and
-uncommitted changes), builds on the Pi (3–5 minutes), restarts the container and waits until
-it's healthy. (brain-gym's `deploy.sh` builds the image on the Mac instead, `linux/arm64` with Docker Desktop,
-and loads it into the Pi with `docker save | docker load`: under a minute, see its README.) Then the app's own first-run step, if any (first admin, invite code, seed).
+uncommitted changes), builds the image on the Mac (`linux/arm64` with Docker Desktop, no emulation on Apple Silicon),
+loads it into the Pi with `docker save | docker load` (about a minute), restarts the container and
+waits until it's healthy. `DEPLOY_BUILD=remote ./deploy.sh` builds on the Pi instead (3–5 minutes). Then the app's own first-run step, if any (first admin, invite code, seed).
 
 Moving existing data in, **before** the first deploy so migrations don't create empty tables first:
 
