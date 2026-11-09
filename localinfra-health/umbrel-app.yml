@@ -2,7 +2,7 @@ manifestVersion: 1
 id: localinfra-health
 category: developer
 name: Container Health
-version: "1.5.0"
+version: "1.6.0"
 tagline: See at a glance whether the containers you run are healthy
 icon: https://raw.githubusercontent.com/LKhoe/local-infra/main/localinfra-health/icon.svg
 description: >-
@@ -24,11 +24,12 @@ description: >-
 
   To hide a one-off container, give it the label localinfra.health.hide=true.
   The app only reads from Docker (the container list, memory readings, each
-  app's package.json version and the backup's status files); it never changes
-  anything.
+  app's package.json version and the backup's status files), through a read-only
+  proxy that refuses every other request; it never changes anything.
 releaseNotes: >-
-  New Internet speed section: press a button to measure the Raspberry Pi's ping, download and
-  upload (against Cloudflare's speed-test servers). It only runs when you ask, never on a schedule.
+  Safer Docker access: the app no longer mounts the Docker socket itself. A small read-only
+  proxy (wollomatic/socket-proxy) holds it and only answers the four GET requests the status
+  page needs (container list, memory, details and package.json version); anything else is refused.
 developer: LKhoe
 website: https://github.com/LKhoe/local-infra
 repo: https://github.com/LKhoe/local-infra
