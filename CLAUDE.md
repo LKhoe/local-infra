@@ -40,7 +40,7 @@ scripts/check-health-app.sh          # before releasing the Container Health app
 - Docker over SSH uses the alias `umbrel-docker` with `ControlMaster no` (a shared connection once
   hung a deploy mid-way). Don't change it to share connections.
 - Postgres, Redis, S3 API and LLM gateway publish on the Pi's loopback only; reach them by SSH tunnel.
-- Add every new app to the port table in `DEPLOYING-APPS.md` (next free: 3004).
+- Add every new app to the port table in `DEPLOYING-APPS.md` (next free: 3005).
 - `.env` holds real secrets (Postgres/Redis admin, OpenRouter key, tunnel token). Never print or commit it;
   `.env.example` is the template.
 - Postgres major upgrades need backup → remove volume → restore (README "Notes"), not an in-place bump.
