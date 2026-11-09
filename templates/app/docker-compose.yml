@@ -20,8 +20,10 @@ services:
         # NEXT_PUBLIC_* are baked into the client bundle at BUILD time
         - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
     ports:
-      # LAN access (http://umbrel.local:<PORT>). The tunnel doesn't use it. Unique per app.
-      - "${PORT:-30XX}:3000"
+      # Loopback only: reach it from the Pi itself or by SSH tunnel (ssh -N -L 8080:127.0.0.1:<PORT>
+      # umbrel@umbrel.local), not from the LAN. The tunnel doesn't use it (it reaches the container
+      # by name, http://myapp:3000). Unique per app.
+      - "127.0.0.1:${PORT:-30XX}:3000"
     environment:
       # ---- local-infra: written into .env by local-infra/scripts/provision-app.sh
       - DATABASE_URL=${DATABASE_URL:?set DATABASE_URL in .env}

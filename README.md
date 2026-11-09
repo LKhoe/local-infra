@@ -569,7 +569,9 @@ ssh -N -L 15432:127.0.0.1:5432 -L 16379:127.0.0.1:6379 -L 13900:127.0.0.1:3900 -
   don't run admin UIs without auth on these networks.
 - **Ports:** `localinfra-metrics` publishes no port at all. Postgres, Redis, the S3 API and the LLM gateway are published on the Pi's loopback only
   (`POSTGRES_PUBLISH` / `REDIS_PUBLISH` / `S3_PUBLISH` / `LLM_PUBLISH`); use the SSH tunnel above to reach
-  them. Garage's RPC and admin ports are never published.
+  them. Garage's RPC and admin ports are never published. Apps' host ports (`templates/app`) are bound to
+  `127.0.0.1` as well, so they are not reachable from the LAN: use them from the Pi or an SSH tunnel; the
+  Cloudflare tunnel reaches apps by container name on `localinfra_tunnel`.
 - **Upgrading Ollama:** bump `OLLAMA_VERSION`, then `./deploy.sh llm`.
   Another local model: set `LLM_LOCAL_MODEL` (any tag from ollama.com/library) and recreate `llm`.
 - **Upgrading Garage:** bump `GARAGE_VERSION`, then `./deploy.sh s3`.

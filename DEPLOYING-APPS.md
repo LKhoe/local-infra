@@ -32,7 +32,7 @@ What every app needs before it can be deployed. The templates in
 | 3 | **No bind mounts** (`./file:/path`) | compose runs on the Mac, the paths would be looked up on the Pi |
 | 4 | Joins local-infra's networks as **external** networks, plus `localinfra_tunnel` if public | the tunnel and the shared services are reachable by container name |
 | 5 | A **healthcheck** on `GET /api/health` that checks the app's dependencies (DB, bucket, ...) | `deploy.sh` waits for it; the widget turns red when it fails |
-| 6 | A **unique host port** from the table below, container port 3000 | LAN access; two apps can't share a port |
+| 6 | A **unique host port** from the table below, container port 3000, **published on the Pi's loopback only** (`127.0.0.1:<port>:3000`) | handy for checks from the Pi or an SSH tunnel without exposing the app to the LAN; two apps can't share a port. The tunnel doesn't use it: it reaches the app by container name (`http://<app>:3000`) |
 | 7 | A **memory limit** (512M default) and json-file log rotation | the Pi also runs umbrelOS and its apps |
 | 8 | The container **migrates on start** (entrypoint: wait for Postgres → migrate → start) | no manual step after a deploy |
 | 9 | The runner image is the **Next.js standalone output only** (no `npm ci` in the runner); entrypoint scripts are bundled with esbuild in the builder, and anything native (sharp) comes from the build's lockfile install, never `npm install <pkg>` | `npm ci --omit=dev` in the runner adds ~700 MB of node_modules; a bare install re-resolves every dependency and native modules (sharp) end up with mismatched versions |
@@ -50,7 +50,9 @@ What every app needs before it can be deployed. The templates in
 | 3004 | doc-extractor |
 | 3005 | *next free* |
 
-Add the app here when you pick its port.
+Add the app here when you pick its port. Host ports are bound to the Pi's loopback
+(`127.0.0.1`), so they are not reachable from the LAN: use them from the Pi itself or an SSH
+tunnel (`ssh -N -L 8080:127.0.0.1:<port> umbrel@umbrel.local`, then `http://localhost:8080`).
 
 ---
 
@@ -142,7 +144,7 @@ ssh -N -L 13900:127.0.0.1:3900 umbrel@umbrel.local    # S3_ENDPOINT=http://local
 ### 5. Check
 
 ```bash
-curl -s http://umbrel.local:<port>/api/health                  # {"status":"ok"}
+ssh umbrel@umbrel.local 'curl -s http://127.0.0.1:<port>/api/health'   # {"status":"ok"}; host ports are loopback-only
 DOCKER_CONTEXT=umbrel docker compose ps                        # (healthy)
 DOCKER_CONTEXT=umbrel docker compose logs -f <app>
 ```
