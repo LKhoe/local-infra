@@ -143,8 +143,8 @@ else
 fi
 
 # ------------------------------------------------------------------ deploy yarg
-step "Building and starting yarg on the Pi (the build runs on the Pi: several minutes)"
-(cd "$YARG_DIR" && docker compose -f docker-compose.yml up -d --build)
+step "Building yarg on this machine (linux/arm64), loading it into the Pi and starting it"
+(cd "$YARG_DIR" && DEPLOY_CONTEXT="$CTX" ./deploy.sh)
 wait_healthy yarg-aggregator 600
 if docker exec yarg-aggregator wget -qO- http://127.0.0.1:3000/api/health >/dev/null; then ok "health endpoint answers"; else echo "    (health endpoint did not answer - check: docker logs yarg-aggregator)"; fi
 
