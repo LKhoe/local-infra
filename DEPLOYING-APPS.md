@@ -47,7 +47,8 @@ What every app needs before it can be deployed. The templates in
 | 3001 | my-recipes |
 | 3002 | sports-cal |
 | 3003 | brain-gym |
-| 3004 | *next free* |
+| 3004 | doc-extractor |
+| 3005 | *next free* |
 
 Add the app here when you pick its port.
 
