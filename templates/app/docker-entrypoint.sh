@@ -31,7 +31,7 @@ if [ $retry_count -eq $max_retries ]; then
 fi
 echo "✅ Database is ready!"
 
-# 2. Run Drizzle migrations via plain .mjs script (no drizzle-kit needed)
+# 2. Run Drizzle migrations via the esbuild bundle of scripts/migrate.mjs (no drizzle-kit, no node_modules)
 echo ""
 echo "🔄 Running database migrations..."
 node scripts/migrate.mjs

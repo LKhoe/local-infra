@@ -35,7 +35,7 @@ What every app needs before it can be deployed. The templates in
 | 6 | A **unique host port** from the table below, container port 3000 | LAN access; two apps can't share a port |
 | 7 | A **memory limit** (512M default) and json-file log rotation | the Pi also runs umbrelOS and its apps |
 | 8 | The container **migrates on start** (entrypoint: wait for Postgres → migrate → start) | no manual step after a deploy |
-| 9 | Runtime deps come from the **lockfile** (`npm ci --omit=dev` in the runner stage), never `npm install <pkg>` | a bare install re-resolves every dependency; native modules (sharp) end up with mismatched versions |
+| 9 | The runner image is the **Next.js standalone output only** (no `npm ci` in the runner); entrypoint scripts are bundled with esbuild in the builder, and anything native (sharp) comes from the build's lockfile install, never `npm install <pkg>` | `npm ci --omit=dev` in the runner adds ~700 MB of node_modules; a bare install re-resolves every dependency and native modules (sharp) end up with mismatched versions |
 | 10 | **`.env` = the Pi, `.env.local` = local dev**, both git-ignored together with `.env.bak-*` | compose reads `.env` on the Mac; Next.js and dev scripts let `.env.local` win |
 | 11 | Redis keys/channels start with `REDIS_KEY_PREFIX`; S3 uses path-style requests, region `garage`; the bucket is never exposed, the app serves its files itself; LLM calls ask for a tier (`simple`/`medium`/`hard`) and handle `429` | local-infra's isolation rules (README section 4) |
 
@@ -68,7 +68,7 @@ Copy from `templates/app/` into the app repo and replace `myapp` / `30XX`:
 |---|---|---|
 | `docker-compose.yml` | repo root | app name, port, drop unused local-infra blocks, add the app's env vars |
 | `deploy.sh` | repo root | nothing (same file in every app) |
-| `Dockerfile`, `docker-entrypoint.sh`, `scripts/migrate.mjs` | same paths | only for a Next.js + Drizzle app; otherwise write your own that keeps rules 8–9 |
+| `Dockerfile`, `docker-entrypoint.sh`, `scripts/migrate.mjs` | same paths | only for a Next.js + Drizzle app; otherwise write your own that keeps rules 8–9. Needs `esbuild` as a devDependency (`npm i -D esbuild`); add each extra `scripts/*.mjs` (seeds) to the Dockerfile's `esbuild` command. See [Image size](#image-size-and-sharp) |
 | `app/api/health/route.ts` | same path | add the app's other dependencies |
 | `lib/metrics/`, `components/metrics.tsx`, `app/api/metrics/route.ts` | same paths | optional, anonymous usage metrics: add `<Metrics />` to the root layout and `onRequestError` to `instrumentation.ts` |
 | `.env.example` | repo root | the app's own settings |
@@ -194,6 +194,20 @@ Use them in `.env.local` with `localhost` instead of the container names
 (`localinfra-postgres` → `localhost:5432`, `localinfra-s3:3900` → `localhost:3900`).
 Never run `provision-app.sh` against Docker Desktop for an app whose `.env` holds the Pi config.
 
+### Image size and sharp
+
+The runner stage copies only `.next/standalone`, `.next/static`, `public/`, the migrations and the
+esbuild bundles of the entrypoint scripts (`scripts/*.mjs` become self-contained files, so
+`drizzle-orm` and `pg` need no `node_modules` at runtime). A Next.js + Drizzle app is then around
+250 MB instead of 1 GB. If an app's script imports something that can't be bundled, add it with
+`--external:<pkg>` and copy that package from the builder (like sharp below).
+
+sharp is a native module that standalone tracing usually includes (Next 15+). To check, after
+`RUN npm run build` in the builder run `ls .next/standalone/node_modules/sharp
+.next/standalone/node_modules/@img`; or build the image and run
+`DOCKER_CONTEXT=desktop-linux docker run --rm --entrypoint ls <app>:latest node_modules/@img`.
+If either is missing, uncomment the two `COPY --from=builder … sharp` / `@img` lines in the Dockerfile.
+
 ## Troubleshooting
 
 | Symptom | Fix |
@@ -201,7 +215,7 @@ Never run `provision-app.sh` against Docker Desktop for an app whose `.env` hold
 | `Network localinfra_… not found` | local-infra isn't running on that context, or the app joins a network it wasn't provisioned for |
 | `Bind for 0.0.0.0:<port> failed` | port taken: pick the next free one from the table |
 | `password authentication failed` / S3 `403` / Redis `NOPERM` | `.env` doesn't match local-infra: rotate (above) |
-| `Error loading shared library libvips-cpp.so…` | rule 9: install runtime deps with `npm ci --omit=dev` |
+| `Error loading shared library libvips-cpp.so…` or `Cannot find module 'sharp'` | rule 9: the standalone output lacks sharp or has a mismatched libvips: uncomment the two `COPY … node_modules/sharp` / `@img` lines in the Dockerfile (copied from the builder's lockfile install) |
 | Sign-in redirects to the wrong host | the public URL in `.env` is wrong; `NEXT_PUBLIC_*` needs a rebuild |
 | docker commands to the Pi hang | the `umbrel` context is sharing an SSH connection: point it at the `umbrel-docker` alias (README section 1). Unstick it now with `ssh -O exit umbrel.local` |
 | A deploy stopped mid-way and the app is down | `DOCKER_CONTEXT=umbrel docker ps -a --filter name=<app>`: remove a leftover `<id>_<app>` container (`docker rm`), then `DOCKER_CONTEXT=umbrel docker compose up -d --no-build <app>` starts the new image. `./deploy.sh --rollback` goes back to the previous one instead |

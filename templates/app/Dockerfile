@@ -1,7 +1,8 @@
 # Next.js (output: "standalone") + Drizzle app image.
 # Template: local-infra/templates/app/Dockerfile — see local-infra/DEPLOYING-APPS.md.
 # Needs: next.config with output: "standalone", scripts/migrate.mjs, lib/db/migrations, an
-# /api/health route, and package-lock.json committed.
+# /api/health route, package-lock.json committed, and esbuild in devDependencies
+# (npm i -D esbuild) to bundle the plain-.mjs entrypoint scripts.
 
 # Build stage
 FROM node:24-alpine AS builder
@@ -28,6 +29,15 @@ ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 # Build the application (output: "standalone" is set in next.config.ts)
 RUN npm run build
 
+# Bundle the plain-.mjs scripts the entrypoint runs (migrations, seeds) with their dependencies
+# (drizzle-orm, pg, ...), so the runner needs no node_modules of its own beyond the standalone
+# output's. pg-native is pg's optional native binding (not installed, pg falls back to JS); the
+# banner gives bundled CommonJS dependencies a require(). Add every script's path to the list.
+RUN npx esbuild scripts/migrate.mjs \
+      --bundle --platform=node --format=esm --target=node24 --outdir=dist-scripts --out-extension:.js=.mjs \
+      --external:pg-native \
+      --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
+
 # Production stage
 FROM node:24-alpine AS runner
 
@@ -44,14 +54,6 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Production deps at the lockfile's exact versions, for the plain-.mjs scripts (migrations, seeds)
-# that run outside the Next.js server, and for native files Next's standalone tracing misses
-# (sharp's dlopen'd libvips .so). Must come from the lockfile:
-# a bare `npm install <pkg>` re-resolves every dependency to its latest version, and a newer
-# libvips next to the standalone output's locked sharp fails with "libvips-cpp.so.X: No such file".
-COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
-
 # Copy only the necessary files for standalone mode
 COPY --from=builder /app/public ./public
 
@@ -59,14 +61,22 @@ COPY --from=builder /app/public ./public
 RUN mkdir .next
 RUN chown nextjs:nodejs .next
 
-# Automatically leverage output traces to reduce image size
+# Automatically leverage output traces to reduce image size: the standalone output carries only the
+# node_modules the server uses (no `npm ci --omit=dev` here, it would add hundreds of MB).
 # https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Database migrations and the plain-.mjs scripts the entrypoint runs (no tsx/drizzle-kit needed)
+# Only if the app uses sharp (next/image, uploads) and the standalone output lacks it. Check in the
+# builder: `ls .next/standalone/node_modules/sharp .next/standalone/node_modules/@img`; when both
+# exist (usual with Next 15+), leave this commented. The builder runs the same Alpine image and
+# architecture, so these are the lockfile's exact versions and the matching libvips.
+# COPY --from=builder --chown=nextjs:nodejs /app/node_modules/sharp ./node_modules/sharp
+# COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@img ./node_modules/@img
+
+# Database migrations and the bundled scripts the entrypoint runs (no tsx/drizzle-kit, no node_modules)
 COPY --from=builder --chown=nextjs:nodejs /app/lib/db/migrations ./lib/db/migrations
-COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
+COPY --from=builder --chown=nextjs:nodejs /app/dist-scripts ./scripts
 
 # Copy and set up entrypoint script
 COPY --chown=nextjs:nodejs docker-entrypoint.sh /usr/local/bin/
