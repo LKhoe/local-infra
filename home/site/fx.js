@@ -233,28 +233,6 @@
     });
   }
 
-  // ---------------------------------------------------------------- drop ripple (.fx-drop cards)
-  // Two rings of light open from where the pointer enters the card, like a drop on water.
-  if (!reduce) {
-    const drop = (card, x, y) => {
-      for (const late of [false, true]) {
-        const r = document.createElement("span");
-        r.className = late ? "ripple late" : "ripple";
-        r.style.left = x + "px"; r.style.top = y + "px";
-        r.addEventListener("animationend", () => r.remove(), { once: true });
-        card.appendChild(r);
-      }
-    };
-    document.querySelectorAll(".fx-drop").forEach((card) => {
-      card.addEventListener("pointerenter", (e) => {
-        const b = card.getBoundingClientRect();
-        drop(card, e.clientX - b.left, e.clientY - b.top);
-      });
-      // keyboard: from the centre
-      card.addEventListener("focus", () => { if (card.matches(":focus-visible")) drop(card, card.clientWidth / 2, card.clientHeight / 2); });
-    });
-  }
-
   // ---------------------------------------------------------------- leaving: water dissolve
   const melt = document.getElementById("melt-map");
   const label = document.querySelector(".veil-label");
