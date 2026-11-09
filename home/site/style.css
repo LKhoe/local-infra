@@ -140,7 +140,7 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .card:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .icon { flex: none; border-radius: 14px; filter: saturate(0.85); transition: transform 0.4s cubic-bezier(.2,1.4,.3,1), filter 0.3s; }
-.card:hover .icon { transform: scale(1.06); filter: saturate(1) url(#ripple); }
+.card:hover .icon { transform: scale(1.06); filter: saturate(1); }
 .text { display: flex; flex-direction: column; min-width: 0; }
 .name { font-weight: 650; font-size: 1.05rem; }
 .desc { color: var(--muted); font-size: 0.925rem; }
@@ -183,5 +183,4 @@ a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   .card { transform: none; }
   .water, .veil { display: none; }
-  .card:hover .icon { filter: none; }
 }
