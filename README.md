@@ -486,10 +486,17 @@ It shows the containers **you** run, meaning anything umbrelOS didn't start (umb
 apps carry the compose working dir `/opt/umbreld/...`). New projects show up on their
 own. Hide a one-off container with the label `localinfra.health.hide=true`.
 
-It is one container: the stock `node:24-alpine` image running
+It is two containers. `server` is the stock `node:24-alpine` image running
 `localinfra-health/server.mjs.template`, non-root, read-only filesystem, no
-capabilities. It reads the Docker socket through the host's `docker` group (gid 987 on
-umbrelOS) and only calls `GET /containers/json` and, while the status page is open,
+capabilities, 128 MB memory limit, and **no Docker socket**: a read-only mount doesn't restrict the
+Docker API, so code running in it could otherwise control the host. The socket goes to
+`socket-proxy` ([wollomatic/socket-proxy](https://github.com/wollomatic/socket-proxy), pinned by
+version and digest; non-root plus the host's `docker` group, gid 987 on umbrelOS; read-only
+filesystem, no capabilities, 64 MB, no published port), which accepts connections from `server`
+only and allows just these GETs, answering everything else (POST, DELETE, `/exec`, `/images`, ...)
+with 403/405. `server` reaches it through `DOCKER_HOST=tcp://socket-proxy:2375`; without that
+variable (local tests) it reads the unix socket directly. To change what `server` may call,
+edit the `-allowGET` regex in `localinfra-health/docker-compose.yml`. `server` only calls `GET /containers/json` and, while the status page is open,
 `GET /containers/<id>/stats` (one-shot, cached 10 seconds) for the memory readings, and once
 per container `GET /containers/<id>/json` + `/archive` to read the `version` of the
 `package.json` in its working directory (images not tagged `:latest` show their tag instead,

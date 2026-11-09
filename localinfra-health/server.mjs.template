@@ -19,6 +19,15 @@ import { randomBytes } from "node:crypto";
 
 const PORT = Number(process.env.PORT || 3000);
 const DOCKER_SOCKET = process.env.DOCKER_SOCKET || "/var/run/docker.sock";
+// On the Pi the app talks to a read-only socket proxy (DOCKER_HOST=tcp://socket-proxy:2375) that only
+// lets the GETs below through; without DOCKER_HOST (local tests) it reads the unix socket directly.
+const DOCKER_TARGET = (() => {
+  const host = process.env.DOCKER_HOST || "";
+  if (!host) return { socketPath: DOCKER_SOCKET };
+  const url = new URL(host.replace(/^tcp:/, "http:"));
+  if (url.protocol !== "http:") throw new Error("DOCKER_HOST must be tcp://host:port");
+  return { host: url.hostname, port: Number(url.port || 2375) };
+})();
 // Containers umbrelOS starts carry this compose working dir; yours carry the
 // folder you deployed from (e.g. /Users/you/Code/project), so they stay visible.
 const EXCLUDE_WORKDIR_PREFIXES = (process.env.EXCLUDE_WORKDIR_PREFIXES || "/opt/umbreld/")
@@ -73,7 +82,7 @@ const RESOURCES = [
 function dockerRaw(path, maxBytes = Infinity) {
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { socketPath: DOCKER_SOCKET, path, method: "GET", timeout: 5000 },
+      { ...DOCKER_TARGET, path, method: "GET", timeout: 5000 },
       (res) => {
         const chunks = [];
         let size = 0;
