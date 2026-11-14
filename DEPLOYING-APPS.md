@@ -124,7 +124,8 @@ with the values for the app filled in and a copy button on each.
 ```
 
 It checks the target, the external networks and `.env` (warns about leftover local values and
-uncommitted changes), builds the image on the Mac (`linux/arm64` with Docker Desktop, no emulation on Apple Silicon),
+uncommitted changes), builds the image on the Mac (`linux/arm64` with Docker Desktop, no emulation on Apple Silicon;
+if Docker Desktop is off it is started for the build and quit afterwards, if it was on it stays on),
 loads it into the Pi with `docker save | docker load` (about a minute), restarts the container and
 waits until it's healthy. `DEPLOY_BUILD=remote ./deploy.sh` builds on the Pi instead (3–5 minutes). Then the app's own first-run step, if any (first admin, invite code, seed).
 
