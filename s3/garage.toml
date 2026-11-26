@@ -9,8 +9,9 @@ data_dir = "/data/blocks"
 
 # The drive is exFAT: no sparse files, which LMDB (Garage's default) depends on.
 db_engine = "sqlite"
-# Two most recent copies of the metadata DB, in case it gets corrupted (power cut, ...)
-metadata_auto_snapshot_interval = "6h"
+# No automatic metadata snapshots by Garage: it names them with ":" in the timestamp, which the
+# exFAT drive refuses (every snapshot failed with "Invalid argument"). The nightly backup takes
+# the snapshot instead, on the drive (backup/backup-garage.sh).
 
 replication_factor = 1
 

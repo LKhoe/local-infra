@@ -137,6 +137,8 @@ services:
       BACKUP_ON_START: ${BACKUP_ON_START:-false}
       BACKUP_DIR: ${BACKUP_DIR:?set BACKUP_DIR in .env}
       HA_BACKUP_MAX_AGE_HOURS: ${HA_BACKUP_MAX_AGE_HOURS:-26}
+      # backup-garage.sh snapshots Garage's metadata from S3_DATA_DIR/meta (on the same drive)
+      S3_DATA_DIR: ${S3_DATA_DIR:?set S3_DATA_DIR in .env}
     volumes:
       # The whole external-drives folder is mounted (it always exists, so Docker never creates
       # a folder at the drive's path) with rslave propagation, so the drive shows up inside
@@ -156,7 +158,7 @@ services:
       - postgres
     # Unhealthy when no Postgres backup succeeded in the last 26h (or ever), so a missed
     # backup shows up in Container Health like any other broken container. Same for the
-    # Home Assistant copy, except during the first 26h after the container starts
+    # Home Assistant copy and the Garage snapshot, except during the first 26h after the container starts
     # (/run/backup.env is written at start), so a fresh deploy isn't flagged before
     # its first nightly run.
     healthcheck:
@@ -164,7 +166,8 @@ services:
         - CMD-SHELL
         - >-
           find /backups/postgres/last_success -mmin -1560 2>/dev/null | grep -q . &&
-          find /backups/homeassistant/last_success /run/backup.env -mmin -1560 2>/dev/null | grep -q .
+          find /backups/homeassistant/last_success /run/backup.env -mmin -1560 2>/dev/null | grep -q . &&
+          find /backups/garage/last_success /run/backup.env -mmin -1560 2>/dev/null | grep -q .
       interval: 5m
       timeout: 10s
       retries: 1

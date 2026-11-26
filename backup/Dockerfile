@@ -2,14 +2,15 @@
 ARG PG_VERSION=18
 FROM postgres:${PG_VERSION}-alpine
 
-# tzdata so BACKUP_CRON runs in your local time (TZ in .env)
-RUN apk add --no-cache tzdata
+# tzdata so BACKUP_CRON runs in your local time (TZ in .env); sqlite for the Garage metadata snapshot
+RUN apk add --no-cache tzdata sqlite
 
 COPY entrypoint.sh /usr/local/bin/backup-entrypoint
 COPY backup.sh /usr/local/bin/backup.sh
 COPY backup-homeassistant.sh /usr/local/bin/backup-homeassistant.sh
+COPY backup-garage.sh /usr/local/bin/backup-garage.sh
 COPY status.sh /usr/local/lib/backup-status.sh
-RUN chmod 755 /usr/local/bin/backup-entrypoint /usr/local/bin/backup.sh /usr/local/bin/backup-homeassistant.sh
+RUN chmod 755 /usr/local/bin/backup-entrypoint /usr/local/bin/backup.sh /usr/local/bin/backup-homeassistant.sh /usr/local/bin/backup-garage.sh
 
 ENTRYPOINT ["backup-entrypoint"]
 CMD []

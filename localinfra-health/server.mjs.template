@@ -314,6 +314,7 @@ async function versionsFor(containers) {
 const BACKUP_JOBS = [
   { key: "postgres", label: "Postgres", c: "postgres", what: "Roles and passwords (globals.sql) and one pg_dump per database, restored with pg_restore." },
   { key: "homeassistant", label: "Home Assistant", c: "homeassistant", what: "A copy of Home Assistant's own newest backup (encrypted .tar, made daily at 03:30)." },
+  { key: "garage", label: "S3 (Garage)", c: "s3", what: "A snapshot of Garage's metadata (buckets, keys, object index) and its node identity; the files themselves stay on the RAID drive." },
 ];
 const BACKUP_FILE_MAX_BYTES = 64 * 1024;
 
