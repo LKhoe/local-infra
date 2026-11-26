@@ -590,6 +590,9 @@ ssh -N -L 15432:127.0.0.1:5432 -L 16379:127.0.0.1:6379 -L 13900:127.0.0.1:3900 -
 
 ## Upgrading Postgres to a new major version (17 → 18 runbook)
 
+How the 2026-11 upgrade went (all services, timings, what broke, what to improve):
+[docs/upgrades/2026-11-26-stack-upgrade.md](docs/upgrades/2026-11-26-stack-upgrade.md).
+
 Postgres can't open data files of another major version, so a major upgrade is **dump → new empty
 cluster → restore**. Expect about 10 to 15 minutes of downtime for every app that uses Postgres. A
 minor update (18.x) needs none of this: `DOCKER_CONTEXT=umbrel docker compose pull && DOCKER_CONTEXT=umbrel docker compose up -d`.
