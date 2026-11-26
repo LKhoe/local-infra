@@ -27,7 +27,7 @@ local-infra/
   llm/                          Ollama image + the LLM gateway (server.mjs, store.mjs, admin.mjs, start.sh)
   metrics/                      anonymous usage metrics from the apps (server, store, admin, tests)
   home/                         static landing page for www.khoe.dev (nginx, site/ = the files)
-  backup/                       tiny image: pg_dump + busybox crond (backup.sh, backup-homeassistant.sh)
+  backup/                       tiny image: pg_dump + busybox crond (backup.sh, backup-homeassistant.sh, backup-garage.sh)
   scripts/bootstrap-pi.sh       first deploy from the Mac: local-infra + yarg, with checks
   scripts/new-project.sh        provision a project (db role + redis user + S3 key), print its env
   scripts/provision-app.sh      new-project.sh + write the credentials into the app's .env
@@ -140,7 +140,9 @@ and its nightly run refuses to write until the marker is there.
 
 The drive is **exFAT**, so Garage uses its SQLite metadata engine (LMDB, the default, needs
 sparse files). The objects are not backed up separately: they're on the RAID 1 drive, which
-covers a dead disk but not deletions or the Pi being lost.
+covers a dead disk but not deletions or the Pi being lost. Garage's own metadata snapshots are
+off (exFAT refuses the `:` in their names); the nightly backup takes one instead, on the drive
+(section 5).
 
 ### .env
 
@@ -367,8 +369,8 @@ DOCKER_CONTEXT=umbrel docker exec -i localinfra-postgres pg_restore -U myapp -d 
 
 ## 5. Backups
 
-Every night at `BACKUP_CRON` (local time, `TZ`), the backup dumps Postgres, then copies
-the newest Home Assistant backup (each step runs even if the other fails):
+Every night at `BACKUP_CRON` (local time, `TZ`), the backup dumps Postgres, copies the newest
+Home Assistant backup, then snapshots Garage's metadata (each step runs even if another fails):
 
 ```
 <BACKUP_DIR>/postgres/
@@ -380,7 +382,17 @@ the newest Home Assistant backup (each step runs even if the other fails):
   daily/2026-10-18_0400/   Automatic_backup_<version>_<date>.tar           same retention
   monthly/...
   last_success, last_success.json
+<BACKUP_DIR>/garage/
+  daily/2026-11-26_0400/   db.sqlite (metadata snapshot, integrity-checked) + node_key,
+                           node_key.pub, cluster_layout, data_layout       same retention
+  monthly/...
+  last_success, last_success.json
 ```
+
+The Garage snapshot is the metadata only (buckets, keys, which blocks make up each object), for a
+corrupted DB (a power cut, say), which RAID 1 would mirror. The objects themselves are not copied.
+`sqlite3 ... "VACUUM INTO"` takes it from the live DB while Garage keeps running, the same way
+Garage's own snapshot does; everything stays on the drive, nothing is written to the SD card.
 
 Every run, good or failed, also leaves its result in `/run/backup-status/<job>.json` inside the
 container (`backup/status.sh`), so a failure is recorded even when the drive is missing. The
@@ -389,17 +401,35 @@ the last run went.
 
 `localinfra-backup` turns **unhealthy** when no backup succeeded in the last 26 hours,
 so a missed backup shows up in `docker ps` and in the Container Health widget. (For Home
-Assistant, only once the container has been up 26 hours, so a fresh deploy isn't flagged.)
+Assistant and Garage, only once the container has been up 26 hours, so a fresh deploy isn't
+flagged.)
 
 ```bash
 DOCKER_CONTEXT=umbrel docker exec localinfra-backup backup.sh                 # run now
 DOCKER_CONTEXT=umbrel docker exec localinfra-backup backup-homeassistant.sh   # copy HA's newest backup now
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup backup-garage.sh          # snapshot Garage's metadata now
 DOCKER_CONTEXT=umbrel docker logs localinfra-backup                           # history
 DOCKER_CONTEXT=umbrel docker exec localinfra-backup ls /backups/postgres/daily
 # restore one database from a backup (replaces its contents)
 DOCKER_CONTEXT=umbrel docker exec localinfra-backup \
   pg_restore --clean --if-exists -d myapp /backups/postgres/daily/<stamp>/myapp.dump
 ```
+
+Restore Garage's metadata (corrupt DB, or the `meta` folder lost; the objects in `blocks/` stay).
+The node identity comes back too, so the node ID and layout are unchanged:
+
+```bash
+DOCKER_CONTEXT=umbrel docker stop localinfra-s3
+# in the drive's S3 folder: keep the broken meta aside, put the snapshot set in its place
+DOCKER_CONTEXT=umbrel docker run --rm --network none -v /home/umbrel/umbrel/external:/home/umbrel/umbrel/external alpine:3.24 sh -c \
+  'cd "<S3_DATA_DIR>" && mv meta meta.broken-$(date +%s) && mkdir meta && cp "<BACKUP_DIR>"/garage/daily/<stamp>/* meta/'
+DOCKER_CONTEXT=umbrel docker start localinfra-s3
+DOCKER_CONTEXT=umbrel docker exec localinfra-s3 garage bucket list   # then garage key list
+```
+
+Files uploaded after that snapshot (up to a day) stay as orphan blocks but are gone from the
+index, so they are lost. Rehearsed on the Mac against a live Garage: same node ID, buckets and
+keys back.
 
 ### Home Assistant
 
