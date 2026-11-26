@@ -1,8 +1,8 @@
 # One container: Ollama (the local model) + the LLM gateway (Node, no npm dependencies;
 # SQLite is node:sqlite). Built on the Node image with only Ollama's CPU build copied in:
 # the official Ollama image carries ~3.5 GB of CUDA libraries the Pi has no use for.
-ARG NODE_VERSION=24
-ARG OLLAMA_VERSION=0.35.1
+ARG NODE_VERSION=26
+ARG OLLAMA_VERSION=0.40.18
 FROM ollama/ollama:${OLLAMA_VERSION} AS ollama
 RUN rm -rf /usr/lib/ollama/cuda_* /usr/lib/ollama/rocm* /usr/lib/ollama/vulkan*
 

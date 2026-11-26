@@ -5,7 +5,7 @@
 # (npm i -D esbuild) to bundle the plain-.mjs entrypoint scripts.
 
 # Build stage
-FROM node:24-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -34,12 +34,12 @@ RUN npm run build
 # output's. pg-native is pg's optional native binding (not installed, pg falls back to JS); the
 # banner gives bundled CommonJS dependencies a require(). Add every script's path to the list.
 RUN npx esbuild scripts/migrate.mjs \
-      --bundle --platform=node --format=esm --target=node24 --outdir=dist-scripts --out-extension:.js=.mjs \
+      --bundle --platform=node --format=esm --target=node26 --outdir=dist-scripts --out-extension:.js=.mjs \
       --external:pg-native \
       --banner:js="import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);"
 
 # Production stage
-FROM node:24-alpine AS runner
+FROM node:26-alpine AS runner
 
 WORKDIR /app
 

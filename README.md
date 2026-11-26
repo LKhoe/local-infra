@@ -486,7 +486,7 @@ It shows the containers **you** run, meaning anything umbrelOS didn't start (umb
 apps carry the compose working dir `/opt/umbreld/...`). New projects show up on their
 own. Hide a one-off container with the label `localinfra.health.hide=true`.
 
-It is two containers. `server` is the stock `node:24-alpine` image running
+It is two containers. `server` is the stock `node:26-alpine` image running
 `localinfra-health/server.mjs.template`, non-root, read-only filesystem, no
 capabilities, 128 MB memory limit, and **no Docker socket**: a read-only mount doesn't restrict the
 Docker API, so code running in it could otherwise control the host. The socket goes to
