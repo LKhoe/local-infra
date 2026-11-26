@@ -1,5 +1,5 @@
 # Same major version as the server, so pg_dump is always compatible.
-ARG PG_VERSION=17
+ARG PG_VERSION=18
 FROM postgres:${PG_VERSION}-alpine
 
 # tzdata so BACKUP_CRON runs in your local time (TZ in .env)

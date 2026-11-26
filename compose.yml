@@ -21,13 +21,27 @@ name: localinfra
 services:
   postgres:
     container_name: localinfra-postgres
-    image: postgres:${PG_VERSION:-17}-alpine
+    image: postgres:${PG_VERSION:-18}-alpine
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_SUPERUSER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in .env}
       POSTGRES_DB: postgres
       TZ: ${TZ:-UTC}
+      # Empty-volume guard (see entrypoint): only set for the first start of a new major (README runbook).
+      PG_ALLOW_INIT: ${PG_ALLOW_INIT:-}
+    # Refuses to create a new empty cluster unless PG_ALLOW_INIT=1: a wrong PG_VERSION or volume layout
+    # would otherwise start an empty database and the apps would migrate into it.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ ! -s "$$PGDATA/PG_VERSION" ] && [ "$$PG_ALLOW_INIT" != 1 ]; then
+          echo "REFUSING TO START: no cluster in $$PGDATA (wrong PG_VERSION or volume?). To create a new empty cluster on purpose: PG_ALLOW_INIT=1 (README: Upgrading Postgres)." >&2
+          exit 1
+        fi
+        exec docker-entrypoint.sh "$$@"
+      - --
     # Tuned for a Raspberry Pi 4 (8 GB) that also runs umbrelOS and its apps.
     command:
       - postgres
@@ -46,7 +60,10 @@ services:
       - -c
       - log_min_duration_statement=1000
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # Postgres 18+ image: PGDATA is /var/lib/postgresql/<major>/docker and the VOLUME is
+      # /var/lib/postgresql (mounting .../data would leave the data in an anonymous volume).
+      # Volume `pgdata` replaced `postgres_data` (17 layout); the old one is kept as rollback.
+      - pgdata:/var/lib/postgresql
     ports:
       # Loopback only by default: reach it from the Pi itself or via an SSH tunnel.
       - "${POSTGRES_PUBLISH:-127.0.0.1:5432}:5432"
@@ -103,8 +120,8 @@ services:
     build:
       context: ./backup
       args:
-        PG_VERSION: ${PG_VERSION:-17}
-    image: localinfra-backup:${PG_VERSION:-17}
+        PG_VERSION: ${PG_VERSION:-18}
+    image: localinfra-backup:${PG_VERSION:-18}
     restart: unless-stopped
     depends_on:
       postgres:
@@ -359,7 +376,7 @@ services:
     logging: *logging
 
 volumes:
-  postgres_data:
+  pgdata:
   redis_data:
   llm_data:
   metrics_summary:

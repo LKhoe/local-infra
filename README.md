@@ -5,9 +5,9 @@ small umbrelOS app that shows whether your containers are healthy.
 
 | Service | Container | Network | Isolation per project |
 |---|---|---|---|
-| PostgreSQL 17 | `localinfra-postgres` | `localinfra_postgres` | own role + own database; other roles can't even connect |
+| PostgreSQL 18 | `localinfra-postgres` | `localinfra_postgres` | own role + own database; other roles can't even connect |
 | Redis 8.12 | `localinfra-redis` | `localinfra_redis` | own ACL user, limited to keys/channels `<project>:*` |
-| S3 (Garage 2.4) | `localinfra-s3` | `localinfra_s3` | own bucket + own access key; can't see, create or delete other buckets |
+| S3 (Garage 2.6) | `localinfra-s3` | `localinfra_s3` | own bucket + own access key; can't see, create or delete other buckets |
 | LLM | `localinfra-llm` | `localinfra_llm` | own key + own limits on paid calls, see [LLM gateway](#llm-gateway) |
 | Metrics | `localinfra-metrics` | `localinfra_metrics` | own key; anonymous usage metrics, see [Metrics](#metrics) |
 | Backup | `localinfra-backup` | `localinfra_postgres` | nightly dump of every database + copy of Home Assistant's backup to the external drive |
@@ -558,11 +558,161 @@ To reach the **Pi's** databases from the Mac (TablePlus, Drizzle Studio, ...):
 ssh -N -L 15432:127.0.0.1:5432 -L 16379:127.0.0.1:6379 -L 13900:127.0.0.1:3900 -L 14000:127.0.0.1:4000 umbrel@umbrel.local
 ```
 
+## Upgrading Postgres to a new major version (17 → 18 runbook)
+
+Postgres can't open data files of another major version, so a major upgrade is **dump → new empty
+cluster → restore**. Expect about 10 to 15 minutes of downtime for every app that uses Postgres. A
+minor update (18.x) needs none of this: `DOCKER_CONTEXT=umbrel docker compose pull && DOCKER_CONTEXT=umbrel docker compose up -d`.
+
+What changed with the 18 image (checked against the docker-library/postgres docs and the 18 Dockerfile):
+
+- **Data layout.** `PGDATA` is now `/var/lib/postgresql/<major>/docker` (`/var/lib/postgresql/18/docker`)
+  and the image's `VOLUME` moved from `/var/lib/postgresql/data` to `/var/lib/postgresql`.
+  `compose.yml` mounts the volume at `/var/lib/postgresql`: mounting `.../data` on 18 would leave the
+  data in an anonymous volume that is lost when the container is recreated. The same mount works for
+  future majors (and for `pg_upgrade --link`).
+- **New volume name.** The 17 data lives in `localinfra_postgres_data` (files directly in the volume).
+  18 uses a new volume, `localinfra_pgdata`, so the old one stays untouched as the rollback.
+- **Defaults that need no action here:** data checksums are on for new clusters (the restore creates
+  a new cluster, so nothing to convert); passwords are already `scram-sha-256` (md5 is deprecated in
+  18, and `new-project.sh` / `provision-app.sh` use the default, i.e. scram); `io_method=worker` is the
+  new default and fits the Pi.
+- **Dumps.** The backup image is built with `PG_VERSION` (18 after this change), so `pg_dump` and
+  `pg_restore` always match the server. Recent dumps contain `\restrict` lines: restore them with the
+  same or newer `psql` (the backup container), not an older client.
+
+Run everything from the Mac, in this checkout, on `main` with the change merged. Every command names
+its Docker context; the Pi is `umbrel`.
+
+**1. Check that a restorable backup exists (nothing is stopped yet).**
+
+```bash
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup backup.sh          # fresh set now, also proves the drive is mounted
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup sh -c 'cat /backups/postgres/last_success; ls -1 /backups/postgres/daily | tail -1'
+# rehearse the restore on a throwaway 18 server (no network, no published port, removed afterwards)
+DOCKER_CONTEXT=umbrel docker run -d --name pg18-rehearsal --network none -e POSTGRES_HOST_AUTH_METHOD=trust postgres:18-alpine
+sleep 15
+STAMP=$(DOCKER_CONTEXT=umbrel docker exec localinfra-backup sh -c 'ls -1 /backups/postgres/daily | tail -1')
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup cat /backups/postgres/daily/$STAMP/globals.sql \
+  | DOCKER_CONTEXT=umbrel docker exec -i pg18-rehearsal psql -X -U postgres -d postgres     # "role postgres already exists" is expected
+for db in $(DOCKER_CONTEXT=umbrel docker exec localinfra-backup sh -c "cd /backups/postgres/daily/$STAMP && ls *.dump" | sed 's/\.dump$//'); do
+  DOCKER_CONTEXT=umbrel docker exec localinfra-backup cat /backups/postgres/daily/$STAMP/$db.dump \
+    | DOCKER_CONTEXT=umbrel docker exec -i pg18-rehearsal pg_restore -U postgres -d postgres --create --exit-on-error \
+    && echo "restored: $db"
+done
+DOCKER_CONTEXT=umbrel docker exec pg18-rehearsal psql -U postgres -Atc "SELECT datname, pg_get_userbyid(datdba) FROM pg_database ORDER BY 1"
+DOCKER_CONTEXT=umbrel docker rm -f pg18-rehearsal
+```
+
+Every database must say `restored:` and show its own role as owner. Stop here if not.
+
+**2. Record the current state** (to compare after the restore):
+
+```bash
+DOCKER_CONTEXT=umbrel docker exec localinfra-postgres psql -U postgres -Atc "SELECT rolname, rolcanlogin, rolconnlimit FROM pg_roles WHERE rolname !~ '^pg_' ORDER BY 1" > roles-before.txt
+DOCKER_CONTEXT=umbrel docker exec localinfra-postgres psql -U postgres -Atc "SELECT datname, pg_get_userbyid(datdba) FROM pg_database WHERE NOT datistemplate ORDER BY 1" > dbs-before.txt
+DOCKER_CONTEXT=umbrel docker network inspect localinfra_postgres --format '{{range .Containers}}{{.Name}}{{"\n"}}{{end}}' \
+  | grep -v -e '^localinfra-postgres$' -e '^localinfra-backup$' -e '^$' > pg-clients.txt
+cat pg-clients.txt     # the apps (and localinfra-metrics) to stop; keep this file for steps 3, 7 and 8
+```
+
+**3. Stop everything that uses Postgres, then take the final dump.** A stopped container stays
+stopped until its next recreate or a reboot of the Pi.
+
+```bash
+DOCKER_CONTEXT=umbrel docker stop $(cat pg-clients.txt)
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup backup.sh
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup sh -c 'cat /backups/postgres/last_success; ls -1 /backups/postgres/daily | tail -1; ls -l /backups/postgres/daily/$(ls -1 /backups/postgres/daily | tail -1)'
+```
+
+Write down that stamp (`<STAMP>` below). It must be newer than the moment the apps stopped and hold
+`globals.sql` plus one `.dump` per database listed in `dbs-before.txt`.
+
+**4. Switch to 18.** In `.env` (the Pi values) set `PG_VERSION=18`, then deploy only the two services.
+Two guards protect against starting an empty database by mistake: `deploy.sh` refuses to deploy while
+`PG_VERSION` resolves below 18 with this compose layout, and the `postgres` container refuses to start
+when its data directory holds no cluster unless `PG_ALLOW_INIT=1` is set. This step is the one time the
+opt-in is needed (set it in the shell only, never in `.env`); later deploys and restarts run without
+it (the next `./deploy.sh postgres` recreates the container once, because the variable is gone again).
+The old container is replaced; the old volume `localinfra_postgres_data` is not touched and not
+referenced any more. The backup image is rebuilt with `pg_dump` 18.
+
+```bash
+PG_ALLOW_INIT=1 ./deploy.sh postgres backup   # DOCKER_CONTEXT=umbrel inside; waits until both are healthy
+DOCKER_CONTEXT=umbrel docker exec localinfra-postgres psql -U postgres -Atc "SHOW server_version" -c "SHOW data_checksums" -c "SHOW password_encryption"
+DOCKER_CONTEXT=umbrel docker exec localinfra-postgres sh -c 'echo $PGDATA'     # /var/lib/postgresql/18/docker
+DOCKER_CONTEXT=umbrel docker inspect localinfra-postgres --format '{{range .Mounts}}{{.Name}} -> {{.Destination}}{{"\n"}}{{end}}'   # only localinfra_pgdata -> /var/lib/postgresql
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup pg_dump --version
+```
+
+**5. Restore** from the final dump, from inside the backup container (it has `PGHOST`, `PGUSER` and
+`PGPASSWORD` set, and `psql`/`pg_restore` 18). Replace `<STAMP>`:
+
+```bash
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup psql -X -d postgres -f /backups/postgres/daily/<STAMP>/globals.sql
+# expected: ERROR: role "postgres" already exists (harmless; the rest of the file still runs and restores every role with its password hash)
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup sh -c 'cd /backups/postgres/daily/<STAMP> && for f in *.dump; do pg_restore -d postgres --create --exit-on-error "$f" && echo "restored: $f"; done'
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup vacuumdb --all --analyze-only     # 17 dumps carry no planner statistics
+```
+
+Do not add `--no-owner` / `--no-acl` here: with `--create` they would leave each database owned by
+`postgres` and lose the `REVOKE ... FROM PUBLIC` (rehearsed without them: owner `myapp`, ACL
+`{myapp=CTc/myapp}`). If one restore fails, drop that database (`psql -U postgres` in
+`localinfra-postgres`, `DROP DATABASE <name>`) and rerun just that file.
+
+**6. Verify roles, databases and passwords** against step 2:
+
+```bash
+DOCKER_CONTEXT=umbrel docker exec localinfra-postgres psql -U postgres -Atc "SELECT rolname, rolcanlogin, rolconnlimit FROM pg_roles WHERE rolname !~ '^pg_' ORDER BY 1" | diff - roles-before.txt && echo roles-same
+DOCKER_CONTEXT=umbrel docker exec localinfra-postgres psql -U postgres -Atc "SELECT datname, pg_get_userbyid(datdba) FROM pg_database WHERE NOT datistemplate ORDER BY 1" | diff - dbs-before.txt && echo dbs-same
+# every login role must hold a scram hash (prints only the scheme, never the hash)
+DOCKER_CONTEXT=umbrel docker exec localinfra-postgres psql -U postgres -Atc "SELECT rolname, split_part(rolpassword,'\$',1) FROM pg_authid WHERE rolcanlogin ORDER BY 1"
+```
+
+The hashes were restored, so every app keeps its password; step 7 is the real login test, because each
+app connects with its own `DATABASE_URL`. If one app can't log in, re-issue its password with
+`DOCKER_CONTEXT=umbrel scripts/new-project.sh <app> --rotate` (it rewrites the app's env; redeploy that app).
+
+**7. Start the apps** and check each one connects and migrates:
+
+```bash
+DOCKER_CONTEXT=umbrel docker start $(cat pg-clients.txt)
+DOCKER_CONTEXT=umbrel docker ps --format '{{.Names}}\t{{.Status}}'
+DOCKER_CONTEXT=umbrel docker logs --tail 20 <app-container>      # no "password authentication failed" / "does not exist"
+DOCKER_CONTEXT=umbrel docker exec localinfra-backup backup.sh      # first backup on 18 must succeed
+```
+
+Then open each public site once. `localinfra-metrics` and the Container Health widget recover on their own.
+
+**8. Rollback** (the 17 data is intact in `localinfra_postgres_data`; nothing wrote to it after step 3, so
+the rollback loses only what the apps wrote after step 7):
+
+```bash
+DOCKER_CONTEXT=umbrel docker stop $(cat pg-clients.txt)
+# in this checkout: put compose.yml and backup/Dockerfile back to the 17 layout (git revert of the upgrade
+# commit) and set PG_VERSION=17 in .env
+./deploy.sh postgres backup
+DOCKER_CONTEXT=umbrel docker start $(cat pg-clients.txt)
+```
+
+If 18 has been running for a while and its data must be kept, take a backup first and restore that dump
+into 17 (`pg_restore` into an older server usually works for these simple schemas, but isn't guaranteed).
+The nightly sets on the external drive are the second line of defence.
+
+**9. Clean up** only after a few days without problems. This permanently deletes the 17 data:
+
+```bash
+DOCKER_CONTEXT=umbrel docker volume rm localinfra_postgres_data
+DOCKER_CONTEXT=umbrel docker rmi localinfra-backup:17 postgres:17-alpine
+```
+
+Until then **do not run `docker volume prune`, `docker system prune --volumes` or `docker compose down -v`**
+on the Pi: the old volume is attached to no container, so a prune would delete the rollback.
+
 ## Notes
 
-- **Upgrading Postgres to a new major version** (e.g. 17 → 18): take a backup, stop
-  the stack, remove the `localinfra_postgres_data` volume, change `PG_VERSION`, start
-  it, then restore `globals.sql` and each `.dump`. Minor updates only need
+- **Upgrading Postgres to a new major version:** follow the runbook in the section above
+  ("Upgrading Postgres to a new major version"). Minor updates only need
   `DOCKER_CONTEXT=umbrel docker compose pull && DOCKER_CONTEXT=umbrel docker compose up -d`.
 - **What's isolated, and what isn't:** credentials and permissions separate the
   projects. Projects on the same network can still reach each other's containers, so

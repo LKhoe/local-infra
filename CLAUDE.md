@@ -40,4 +40,4 @@ scripts/check-health-app.sh          # before releasing the Container Health app
   container name.
 - `.env` holds real secrets (Postgres/Redis admin, OpenRouter key, tunnel token); `.env.example` is
   the template.
-- Postgres major upgrades need backup → remove volume → restore (README "Notes"), not an in-place bump.
+- Postgres major upgrades need dump → new volume → restore, old volume kept as rollback (README runbook "Upgrading Postgres"), not an in-place bump.
