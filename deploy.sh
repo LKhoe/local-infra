@@ -73,6 +73,14 @@ docker info --format '{{.Name}}' >/dev/null 2>&1 \
 
 config=$("${COMPOSE[@]}" config --format json) || die "compose.yml / .env don't resolve (see the error above)."
 
+# Postgres 18+ keeps its data under /var/lib/postgresql/<major>/docker in the volume `pgdata`. An older
+# PG_VERSION (stale .env, shell variable) would start a different server on that empty volume.
+pg_image=$(jq -r '.services.postgres.image // empty' <<<"$config")
+pg_major=$(sed -n 's/^postgres:\([0-9][0-9]*\).*/\1/p' <<<"$pg_image")
+pg_layout18=$(jq -r '[.services.postgres.volumes[]? | select(.target == "/var/lib/postgresql")] | length' <<<"$config")
+[[ -z "$pg_image" || "$pg_layout18" == 0 || "${pg_major:-0}" -ge 18 ]] \
+  || die "compose resolves Postgres to '$pg_image' (PG_VERSION in .env or your shell), but compose.yml uses the 18 volume layout. Set PG_VERSION=18 after following README 'Upgrading Postgres to a new major version'; deploying now would start an empty database."
+
 services=("$@")
 if (( ${#services[@]} == 0 )); then
   while read -r s; do services+=("$s"); done < <(jq -r '.services | keys[]' <<<"$config")

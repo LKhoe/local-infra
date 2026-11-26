@@ -219,7 +219,7 @@ async function memoryFor(targets) {
 
 // ---------------------------------------------------------------- versions
 // What each container runs, for the project list. In order: the image's version label,
-// the image tag (postgres:17-alpine, localinfra-s3:v2.4.1), and for ":latest" images (the
+// the image tag (postgres:18-alpine, localinfra-s3:v2.4.1), and for ":latest" images (the
 // apps deployed with deploy.sh) the "version" of package.json in the container's working
 // dir, read once per container through Docker's read-only archive endpoint.
 
