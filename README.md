@@ -6,7 +6,7 @@ small umbrelOS app that shows whether your containers are healthy.
 | Service | Container | Network | Isolation per project |
 |---|---|---|---|
 | PostgreSQL 17 | `localinfra-postgres` | `localinfra_postgres` | own role + own database; other roles can't even connect |
-| Redis 7.4 | `localinfra-redis` | `localinfra_redis` | own ACL user, limited to keys/channels `<project>:*` |
+| Redis 8.12 | `localinfra-redis` | `localinfra_redis` | own ACL user, limited to keys/channels `<project>:*` |
 | S3 (Garage 2.4) | `localinfra-s3` | `localinfra_s3` | own bucket + own access key; can't see, create or delete other buckets |
 | LLM | `localinfra-llm` | `localinfra_llm` | own key + own limits on paid calls, see [LLM gateway](#llm-gateway) |
 | Metrics | `localinfra-metrics` | `localinfra_metrics` | own key; anonymous usage metrics, see [Metrics](#metrics) |
