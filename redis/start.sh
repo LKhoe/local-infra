@@ -17,6 +17,9 @@ others=$(grep -v '^user default ' "$ACL_FILE" || true)
 } > "$ACL_FILE.tmp"
 mv "$ACL_FILE.tmp" "$ACL_FILE"
 chmod 600 "$ACL_FILE"
+# Redis drops to the "redis" user and must read this file. The 7.x entrypoint chowned all of /data;
+# the 8.x one skips the chown when /data holds files it doesn't know (like users.acl), so do it here.
+chown redis:redis "$ACL_FILE" 2>/dev/null || true
 
 # The official entrypoint fixes /data ownership and drops to the "redis" user.
 # noeviction: BullMQ (and any queue) must never have keys silently evicted.

@@ -75,8 +75,8 @@ services:
     build:
       context: ./redis
       args:
-        REDIS_VERSION: ${REDIS_VERSION:-7.4}
-    image: localinfra-redis:${REDIS_VERSION:-7.4}
+        REDIS_VERSION: ${REDIS_VERSION:-8.12}
+    image: localinfra-redis:${REDIS_VERSION:-8.12}
     restart: unless-stopped
     environment:
       REDIS_ADMIN_PASSWORD: ${REDIS_ADMIN_PASSWORD:?set REDIS_ADMIN_PASSWORD in .env}

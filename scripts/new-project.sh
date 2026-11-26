@@ -131,7 +131,7 @@ if $want_redis; then
   REDIS_PASSWORD=$(gen_password)
   redis_admin ACL SETUSER "$name" reset on ">$REDIS_PASSWORD" \
     "~$name:*" "&$name:*" \
-    "+@all" "-@admin" "-flushall" "-flushdb" "-swapdb" >/dev/null
+    "+@all" "-@admin" "-flushall" "-flushdb" "-swapdb" "-trimslots" "-bless" >/dev/null
   redis_admin ACL SAVE >/dev/null
   echo "Redis: user \"$name\" ready (keys/channels \"$name:*\")." >&2
 fi
