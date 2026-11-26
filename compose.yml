@@ -163,8 +163,8 @@ services:
     build:
       context: ./s3
       args:
-        GARAGE_VERSION: ${GARAGE_VERSION:-v2.4.1}
-    image: localinfra-s3:${GARAGE_VERSION:-v2.4.1}
+        GARAGE_VERSION: ${GARAGE_VERSION:-v2.6.0}
+    image: localinfra-s3:${GARAGE_VERSION:-v2.6.0}
     restart: unless-stopped
     environment:
       GARAGE_RPC_SECRET: ${S3_RPC_SECRET:?set S3_RPC_SECRET in .env}
@@ -207,9 +207,9 @@ services:
     build:
       context: ./llm
       args:
-        NODE_VERSION: ${LLM_NODE_VERSION:-24}
-        OLLAMA_VERSION: ${OLLAMA_VERSION:-0.35.1}
-    image: localinfra-llm:${OLLAMA_VERSION:-0.35.1}
+        NODE_VERSION: ${LLM_NODE_VERSION:-26}
+        OLLAMA_VERSION: ${OLLAMA_VERSION:-0.40.18}
+    image: localinfra-llm:${OLLAMA_VERSION:-0.40.18}
     restart: unless-stopped
     environment:
       TZ: ${TZ:-UTC}
@@ -267,7 +267,7 @@ services:
     build:
       context: ./metrics
       args:
-        NODE_VERSION: ${METRICS_NODE_VERSION:-24}
+        NODE_VERSION: ${METRICS_NODE_VERSION:-26}
     image: localinfra-metrics:latest
     restart: unless-stopped
     depends_on:
@@ -304,7 +304,7 @@ services:
 
   tunnel:
     container_name: localinfra-tunnel
-    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-2026.10.4}
+    image: cloudflare/cloudflared:${CLOUDFLARED_VERSION:-2026.11.2}
     restart: unless-stopped
     # Routes (hostname → http://<container>:<port>) live in Cloudflare Zero Trust, not here.
     command: ["tunnel", "--no-autoupdate", "run"]

@@ -10,7 +10,7 @@ services:
 
   server:
     # Stock image (same base as yarg's); the app is the single file next to this one
-    image: node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1
+    image: node:26-alpine@sha256:6bd9ab43c0ec0190ca7b2d193906cb8b7edf6e7f4afa43ddeccd6452710bffb5
     restart: on-failure
     command: ["node", "/app/server.mjs"]
     environment:
@@ -45,7 +45,7 @@ services:
   # matches the regex below, from `server` alone; everything else (POST, DELETE, /exec,
   # /images, ...) gets 403. Needed: /containers/json, /containers/<id>/stats, /json and /archive.
   socket-proxy:
-    image: wollomatic/socket-proxy:1.13.2@sha256:ff95d6ff6c27853005ef85eb8f4ab5923dc3d2f1e055f98fb6aeeaceec3fe848
+    image: wollomatic/socket-proxy:1.14.0@sha256:fead157c4de4092461267092be49c993c2e6dd296a54c89ed04b8c870016b045
     restart: on-failure
     command:
       - -listenip=0.0.0.0

@@ -1,5 +1,5 @@
 # localinfra-metrics: Node + one npm dependency (postgres, no transitive deps), from the lockfile.
-ARG NODE_VERSION=24
+ARG NODE_VERSION=26
 FROM node:${NODE_VERSION}-alpine
 
 WORKDIR /app
